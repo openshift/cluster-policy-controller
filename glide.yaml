@@ -1,4 +1,4 @@
-package: github.com/openshift/openshift-controller-manager
+package: github.com/openshift/cluster-policy-controller
 import:
 # kube first
 - package: k8s.io/api

@@ -11,7 +11,7 @@ import (
 
 	"k8s.io/klog"
 
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
 	v1core "k8s.io/client-go/kubernetes/typed/core/v1"
@@ -22,9 +22,9 @@ import (
 	"k8s.io/kubernetes/pkg/api/legacyscheme"
 
 	openshiftcontrolplanev1 "github.com/openshift/api/openshiftcontrolplane/v1"
-	origincontrollers "github.com/openshift/openshift-controller-manager/pkg/cmd/controller"
-	"github.com/openshift/openshift-controller-manager/pkg/cmd/imageformat"
-	"github.com/openshift/openshift-controller-manager/pkg/version"
+	origincontrollers "github.com/openshift/cluster-policy-controller/pkg/cmd/controller"
+	"github.com/openshift/cluster-policy-controller/pkg/cmd/imageformat"
+	"github.com/openshift/cluster-policy-controller/pkg/version"
 
 	// for metrics
 	_ "k8s.io/kubernetes/pkg/client/metrics/prometheus"

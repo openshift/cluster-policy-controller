@@ -28,8 +28,8 @@ import (
 	"github.com/openshift/api/template"
 	"github.com/openshift/api/user"
 
-	openshift_controller_manager "github.com/openshift/openshift-controller-manager/pkg/cmd/openshift-controller-manager"
-	"github.com/openshift/openshift-controller-manager/pkg/version"
+	openshift_controller_manager "github.com/openshift/cluster-policy-controller/pkg/cmd/openshift-controller-manager"
+	"github.com/openshift/cluster-policy-controller/pkg/version"
 )
 
 func init() {

@@ -24,9 +24,9 @@ import (
 
 	securityv1 "github.com/openshift/api/security/v1"
 	securityv1client "github.com/openshift/client-go/security/clientset/versioned/typed/security/v1"
+	"github.com/openshift/cluster-policy-controller/pkg/security/mcs"
+	"github.com/openshift/cluster-policy-controller/pkg/security/uidallocator"
 	"github.com/openshift/library-go/pkg/security/uid"
-	"github.com/openshift/openshift-controller-manager/pkg/security/mcs"
-	"github.com/openshift/openshift-controller-manager/pkg/security/uidallocator"
 )
 
 const (

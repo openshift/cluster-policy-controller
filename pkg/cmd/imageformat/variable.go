@@ -5,7 +5,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/openshift/openshift-controller-manager/pkg/version"
+	"github.com/openshift/cluster-policy-controller/pkg/version"
 )
 
 // KeyFunc returns the value associated with the provided key or false if no

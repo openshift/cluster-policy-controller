@@ -3,9 +3,9 @@ package controller
 import (
 	"fmt"
 
+	sccallocation "github.com/openshift/cluster-policy-controller/pkg/security/controller"
+	"github.com/openshift/cluster-policy-controller/pkg/security/mcs"
 	"github.com/openshift/library-go/pkg/security/uid"
-	sccallocation "github.com/openshift/openshift-controller-manager/pkg/security/controller"
-	"github.com/openshift/openshift-controller-manager/pkg/security/mcs"
 )
 
 func RunNamespaceSecurityAllocationController(ctx *ControllerContext) (bool, error) {

@@ -4,9 +4,9 @@ import (
 	"math/rand"
 	"time"
 
+	"github.com/openshift/cluster-policy-controller/pkg/quota/clusterquotareconciliation"
+	image "github.com/openshift/cluster-policy-controller/pkg/quota/quotaimageexternal"
 	"github.com/openshift/library-go/pkg/quota/clusterquotamapping"
-	"github.com/openshift/openshift-controller-manager/pkg/quota/clusterquotareconciliation"
-	image "github.com/openshift/openshift-controller-manager/pkg/quota/quotaimageexternal"
 	"k8s.io/kubernetes/pkg/controller"
 	kresourcequota "k8s.io/kubernetes/pkg/controller/resourcequota"
 	"k8s.io/kubernetes/pkg/quota/v1/generic"
