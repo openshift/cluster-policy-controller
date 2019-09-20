@@ -1,4 +1,4 @@
-package openshift_controller_manager
+package cluster_policy_controller
 
 import (
 	"time"

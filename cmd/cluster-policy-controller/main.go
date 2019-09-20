@@ -28,7 +28,7 @@ import (
 	"github.com/openshift/api/template"
 	"github.com/openshift/api/user"
 
-	openshift_controller_manager "github.com/openshift/cluster-policy-controller/pkg/cmd/openshift-controller-manager"
+	cluster_policy_controller "github.com/openshift/cluster-policy-controller/pkg/cmd/cluster-policy-controller"
 	"github.com/openshift/cluster-policy-controller/pkg/version"
 )
 
@@ -63,23 +63,23 @@ func main() {
 		runtime.GOMAXPROCS(runtime.NumCPU())
 	}
 
-	command := NewOpenShiftControllerManagerCommand(stopCh)
+	command := NewClusterPolicyControllerCommand(stopCh)
 	if err := command.Execute(); err != nil {
 		fmt.Fprintf(os.Stderr, "%v\n", err)
 		os.Exit(1)
 	}
 }
 
-func NewOpenShiftControllerManagerCommand(stopCh <-chan struct{}) *cobra.Command {
+func NewClusterPolicyControllerCommand(stopCh <-chan struct{}) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "openshift-controller-manager",
-		Short: "Command for the OpenShift Controllers",
+		Use:   "cluster-policy-controller",
+		Short: "Command for the OpenShift Cluster Policy Controller",
 		Run: func(cmd *cobra.Command, args []string) {
 			cmd.Help()
 			os.Exit(1)
 		},
 	}
-	start := openshift_controller_manager.NewOpenShiftControllerManagerCommand("start", os.Stdout, os.Stderr)
+	start := cluster_policy_controller.NewClusterPolicyControllerCommand("start", os.Stdout, os.Stderr)
 	cmd.AddCommand(start)
 
 	return cmd
