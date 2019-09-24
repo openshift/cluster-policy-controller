@@ -1,4 +1,4 @@
-package openshift_controller_manager
+package cluster_policy_controller
 
 import (
 	"errors"
@@ -26,29 +26,29 @@ import (
 	"github.com/openshift/library-go/pkg/serviceability"
 )
 
-const RecommendedStartControllerManagerName = "openshift-controller-manager"
+const RecommendedStartControllerName = "cluster-policy-controller"
 
-type OpenShiftControllerManager struct {
+type ClusterPolicyController struct {
 	ConfigFilePath string
 	Output         io.Writer
 }
 
 var longDescription = templates.LongDesc(`
-	Start the OpenShift controllers`)
+	Start the Cluster Policy Controller`)
 
-func NewOpenShiftControllerManagerCommand(name string, out, errout io.Writer) *cobra.Command {
-	options := &OpenShiftControllerManager{Output: out}
+func NewClusterPolicyControllerCommand(name string, out, errout io.Writer) *cobra.Command {
+	options := &ClusterPolicyController{Output: out}
 
 	cmd := &cobra.Command{
 		Use:   name,
-		Short: "Start the OpenShift controllers",
+		Short: "Start the cluster policy controller",
 		Long:  longDescription,
 		Run: func(c *cobra.Command, args []string) {
 			kcmdutil.CheckErr(options.Validate())
 
 			serviceability.StartProfiler()
 
-			if err := options.StartControllerManager(); err != nil {
+			if err := options.StartClusterPolicyController(); err != nil {
 				if kerrors.IsInvalid(err) {
 					if details := err.(*kerrors.StatusError).ErrStatus.Details; details != nil {
 						fmt.Fprintf(errout, "Invalid %s %s\n", details.Kind, details.Name)
@@ -72,7 +72,7 @@ func NewOpenShiftControllerManagerCommand(name string, out, errout io.Writer) *c
 	return cmd
 }
 
-func (o *OpenShiftControllerManager) Validate() error {
+func (o *ClusterPolicyController) Validate() error {
 	if len(o.ConfigFilePath) == 0 {
 		return errors.New("--config is required for this command")
 	}
@@ -80,9 +80,9 @@ func (o *OpenShiftControllerManager) Validate() error {
 	return nil
 }
 
-// StartControllerManager calls RunControllerManager and then waits forever
-func (o *OpenShiftControllerManager) StartControllerManager() error {
-	if err := o.RunControllerManager(); err != nil {
+// StartClusterPolicyController calls RunPolicyController and then waits forever
+func (o *ClusterPolicyController) StartClusterPolicyController() error {
+	if err := o.RunPolicyController(); err != nil {
 		return err
 	}
 
@@ -90,8 +90,8 @@ func (o *OpenShiftControllerManager) StartControllerManager() error {
 	select {}
 }
 
-// RunControllerManager takes the options and starts the controllers
-func (o *OpenShiftControllerManager) RunControllerManager() error {
+// RunPolicyController takes the options and starts the controller
+func (o *ClusterPolicyController) RunPolicyController() error {
 	// try to decode into our new types first.  right now there is no validation, no file path resolution.  this unsticks the operator to start.
 	// TODO add those things
 	configContent, err := ioutil.ReadFile(o.ConfigFilePath)
@@ -128,5 +128,5 @@ func (o *OpenShiftControllerManager) RunControllerManager() error {
 	if err != nil {
 		return err
 	}
-	return RunOpenShiftControllerManager(config, clientConfig)
+	return RunClusterPolicyController(config, clientConfig)
 }

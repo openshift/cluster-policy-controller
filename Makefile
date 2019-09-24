@@ -17,7 +17,7 @@ include $(addprefix ./vendor/github.com/openshift/library-go/alpha-build-machine
 $(call build-image,origin-$(GO_PACKAGE),./Dockerfile,.)
 
 clean:
-	$(RM) ./openshift-controller-manager
+	$(RM) ./cluster-policy-controller
 .PHONY: clean
 
 GO_TEST_PACKAGES :=./pkg/... ./cmd/...

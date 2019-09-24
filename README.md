@@ -1,3 +1,3 @@
-##### openshift-controller-manager
+##### cluster-policy-controller
 
 TODO: Add content

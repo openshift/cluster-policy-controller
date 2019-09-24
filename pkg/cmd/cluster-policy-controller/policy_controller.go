@@ -1,4 +1,4 @@
-package openshift_controller_manager
+package cluster_policy_controller
 
 import (
 	"context"
@@ -30,7 +30,7 @@ import (
 	_ "k8s.io/kubernetes/pkg/client/metrics/prometheus"
 )
 
-func RunOpenShiftControllerManager(config *openshiftcontrolplanev1.OpenShiftControllerManagerConfig, clientConfig *rest.Config) error {
+func RunClusterPolicyController(config *openshiftcontrolplanev1.OpenShiftControllerManagerConfig, clientConfig *rest.Config) error {
 	serviceability.InitLogrusFromKlog()
 	kubeClient, err := kubernetes.NewForConfig(clientConfig)
 	if err != nil {
@@ -77,14 +77,14 @@ func RunOpenShiftControllerManager(config *openshiftcontrolplanev1.OpenShiftCont
 	eventBroadcaster := record.NewBroadcaster()
 	eventBroadcaster.StartLogging(klog.Infof)
 	eventBroadcaster.StartRecordingToSink(&v1core.EventSinkImpl{Interface: kubeClient.CoreV1().Events("")})
-	eventRecorder := eventBroadcaster.NewRecorder(legacyscheme.Scheme, v1.EventSource{Component: "openshift-controller-manager"})
+	eventRecorder := eventBroadcaster.NewRecorder(legacyscheme.Scheme, v1.EventSource{Component: "cluster-policy-controller"})
 	id, err := os.Hostname()
 	if err != nil {
 		return err
 	}
 	rl, err := resourcelock.New(
 		"configmaps",
-		"openshift-controller-manager",
+		"cluster-policy-controller",
 		"openshift-master-controllers", // this matches what ansible used to set
 		kubeClient.CoreV1(),
 		kubeClient.CoordinationV1(),
