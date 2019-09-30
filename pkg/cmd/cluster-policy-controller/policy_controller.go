@@ -23,7 +23,6 @@ import (
 
 	openshiftcontrolplanev1 "github.com/openshift/api/openshiftcontrolplane/v1"
 	origincontrollers "github.com/openshift/cluster-policy-controller/pkg/cmd/controller"
-	"github.com/openshift/cluster-policy-controller/pkg/cmd/imageformat"
 	"github.com/openshift/cluster-policy-controller/pkg/version"
 
 	// for metrics
@@ -44,19 +43,6 @@ func RunClusterPolicyController(config *openshiftcontrolplanev1.OpenShiftControl
 		if err := origincontrollers.RunControllerServer(*config.ServingInfo, kubeClient); err != nil {
 			return err
 		}
-	}
-
-	{
-		imageTemplate := imageformat.NewDefaultImageTemplate()
-		imageTemplate.Format = config.Deployer.ImageTemplateFormat.Format
-		imageTemplate.Latest = config.Deployer.ImageTemplateFormat.Latest
-		klog.Infof("DeploymentConfig controller using images from %q", imageTemplate.ExpandOrDie("<component>"))
-	}
-	{
-		imageTemplate := imageformat.NewDefaultImageTemplate()
-		imageTemplate.Format = config.Build.ImageTemplateFormat.Format
-		imageTemplate.Latest = config.Build.ImageTemplateFormat.Latest
-		klog.Infof("Build controller using images from %q", imageTemplate.ExpandOrDie("<component>"))
 	}
 
 	originControllerManager := func(ctx context.Context) {

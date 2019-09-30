@@ -16,15 +16,6 @@ func setRecommendedOpenShiftControllerConfigDefaults(config *openshiftcontrolpla
 
 	configdefaults.DefaultStringSlice(&config.Controllers, []string{"*"})
 
-	configdefaults.DefaultString(&config.Network.ServiceNetworkCIDR, "10.0.0.0/24")
-
-	if config.ImageImport.MaxScheduledImageImportsPerMinute == 0 {
-		config.ImageImport.MaxScheduledImageImportsPerMinute = 60
-	}
-	if config.ImageImport.ScheduledImageImportMinimumIntervalSeconds == 0 {
-		config.ImageImport.ScheduledImageImportMinimumIntervalSeconds = 15 * 60
-	}
-
 	configdefaults.DefaultString(&config.SecurityAllocator.UIDAllocatorRange, "1000000000-1999999999/10000")
 	configdefaults.DefaultString(&config.SecurityAllocator.MCSAllocatorRange, "s0:/2")
 	if config.SecurityAllocator.MCSLabelsPerProject == 0 {
@@ -40,21 +31,6 @@ func setRecommendedOpenShiftControllerConfigDefaults(config *openshiftcontrolpla
 	if config.ResourceQuota.ConcurrentSyncs == 0 {
 		config.ResourceQuota.ConcurrentSyncs = 5
 	}
-
-	if config.ImageImport.MaxScheduledImageImportsPerMinute == 0 {
-		config.ImageImport.MaxScheduledImageImportsPerMinute = 60
-	}
-	if config.ImageImport.ScheduledImageImportMinimumIntervalSeconds == 0 {
-		config.ImageImport.ScheduledImageImportMinimumIntervalSeconds = 15 * 60 // 15 minutes
-	}
-
-	configdefaults.DefaultStringSlice(&config.ServiceAccount.ManagedNames, []string{"builder", "deployer"})
-
-	// TODO this default is WRONG, but it appears to work
-	configdefaults.DefaultString(&config.Deployer.ImageTemplateFormat.Format, "quay.io/openshift/origin-${component}:${version}")
-
-	// TODO this default is WRONG, but it appears to work
-	configdefaults.DefaultString(&config.Build.ImageTemplateFormat.Format, "quay.io/openshift/origin-${component}:${version}")
 }
 
 func getOpenShiftControllerConfigFileReferences(config *openshiftcontrolplanev1.OpenShiftControllerManagerConfig) []*string {
