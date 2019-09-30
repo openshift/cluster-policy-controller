@@ -84,8 +84,9 @@ func RunClusterPolicyController(config *openshiftcontrolplanev1.OpenShiftControl
 	}
 	rl, err := resourcelock.New(
 		"configmaps",
+		// namespace where cluster-policy-controller container runs in static pod
+		"openshift-kube-controller-manager",
 		"cluster-policy-controller",
-		"openshift-master-controllers", // this matches what ansible used to set
 		kubeClient.CoreV1(),
 		kubeClient.CoordinationV1(),
 		resourcelock.ResourceLockConfig{
