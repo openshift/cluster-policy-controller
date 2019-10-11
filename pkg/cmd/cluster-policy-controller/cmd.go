@@ -1,7 +1,6 @@
 package cluster_policy_controller
 
 import (
-	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -17,7 +16,6 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/tools/clientcmd/api"
 	"k8s.io/klog"
-	kcmdutil "k8s.io/kubernetes/pkg/kubectl/cmd/util"
 	"k8s.io/kubernetes/pkg/kubectl/util/templates"
 
 	configv1 "github.com/openshift/api/config/v1"
@@ -44,8 +42,6 @@ func NewClusterPolicyControllerCommand(name string, out, errout io.Writer) *cobr
 		Short: "Start the cluster policy controller",
 		Long:  longDescription,
 		Run: func(c *cobra.Command, args []string) {
-			kcmdutil.CheckErr(options.Validate())
-
 			serviceability.StartProfiler()
 
 			if err := options.StartClusterPolicyController(); err != nil {
@@ -67,17 +63,8 @@ func NewClusterPolicyControllerCommand(name string, out, errout io.Writer) *cobr
 	// This command only supports reading from config
 	flags.StringVar(&options.ConfigFilePath, "config", options.ConfigFilePath, "Location of the master configuration file to run from.")
 	cmd.MarkFlagFilename("config", "yaml", "yml")
-	cmd.MarkFlagRequired("config")
 
 	return cmd
-}
-
-func (o *ClusterPolicyController) Validate() error {
-	if len(o.ConfigFilePath) == 0 {
-		return errors.New("--config is required for this command")
-	}
-
-	return nil
 }
 
 // StartClusterPolicyController calls RunPolicyController and then waits forever
@@ -92,36 +79,45 @@ func (o *ClusterPolicyController) StartClusterPolicyController() error {
 
 // RunPolicyController takes the options and starts the controller
 func (o *ClusterPolicyController) RunPolicyController() error {
-	// try to decode into our new types first.  right now there is no validation, no file path resolution.  this unsticks the operator to start.
-	// TODO add those things
-	configContent, err := ioutil.ReadFile(o.ConfigFilePath)
-	if err != nil {
-		return err
-	}
-	scheme := runtime.NewScheme()
-	utilruntime.Must(openshiftcontrolplanev1.Install(scheme))
-	codecs := serializer.NewCodecFactory(scheme)
-	obj, err := runtime.Decode(codecs.UniversalDecoder(openshiftcontrolplanev1.GroupVersion, configv1.GroupVersion), configContent)
-	if err != nil {
-		return err
+
+	config := &openshiftcontrolplanev1.OpenShiftControllerManagerConfig{
+		/// this isn't allowed to be nil when by itself.
+		ServingInfo: &configv1.HTTPServingInfo{},
 	}
 
-	// Resolve relative to CWD
-	absoluteConfigFile, err := api.MakeAbs(o.ConfigFilePath, "")
-	if err != nil {
-		return err
-	}
-	configFileLocation := path.Dir(absoluteConfigFile)
+	if len(o.ConfigFilePath) != 0 {
+		// try to decode into our new types first.  right now there is no validation, no file path resolution.  this unsticks the operator to start.
+		// TODO add those things
+		configContent, err := ioutil.ReadFile(o.ConfigFilePath)
+		if err != nil {
+			return err
+		}
+		scheme := runtime.NewScheme()
+		utilruntime.Must(openshiftcontrolplanev1.Install(scheme))
+		codecs := serializer.NewCodecFactory(scheme)
+		obj, err := runtime.Decode(codecs.UniversalDecoder(openshiftcontrolplanev1.GroupVersion, configv1.GroupVersion), configContent)
+		if err != nil {
+			return err
+		}
 
-	config := obj.(*openshiftcontrolplanev1.OpenShiftControllerManagerConfig)
-	/// this isn't allowed to be nil when by itself.
-	// TODO remove this when the old path is gone.
-	if config.ServingInfo == nil {
-		config.ServingInfo = &configv1.HTTPServingInfo{}
+		// Resolve relative to CWD
+		absoluteConfigFile, err := api.MakeAbs(o.ConfigFilePath, "")
+		if err != nil {
+			return err
+		}
+		configFileLocation := path.Dir(absoluteConfigFile)
+
+		config = obj.(*openshiftcontrolplanev1.OpenShiftControllerManagerConfig)
+		/// this isn't allowed to be nil when by itself.
+		// TODO remove this when the old path is gone.
+		if config.ServingInfo == nil {
+			config.ServingInfo = &configv1.HTTPServingInfo{}
+		}
+		if err := helpers.ResolvePaths(getOpenShiftControllerConfigFileReferences(config), configFileLocation); err != nil {
+			return err
+		}
 	}
-	if err := helpers.ResolvePaths(getOpenShiftControllerConfigFileReferences(config), configFileLocation); err != nil {
-		return err
-	}
+
 	setRecommendedOpenShiftControllerConfigDefaults(config)
 
 	clientConfig, err := helpers.GetKubeClientConfig(config.KubeClientConfig)
