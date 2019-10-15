@@ -30,8 +30,12 @@ type ClusterPolicyController struct {
 	ConfigFilePath string
 	// KubeConfigFile points to a kubeconfig file if you don't want to use the in cluster config
 	KubeConfigFile string
-
-	Output io.Writer
+	// ClientCAFile points to file if you don't use the default
+	ClientCAFile string
+	// TLSCertFile and TLSPrivateKeyFile point files with TLS cert,key if you don't use the default /var/run/secrets/serving-cert/
+	TLSCertFile       string
+	TLSPrivateKeyFile string
+	Output            io.Writer
 }
 
 var longDescription = templates.LongDesc(`
@@ -67,7 +71,13 @@ func NewClusterPolicyControllerCommand(name string, out, errout io.Writer) *cobr
 	flags.StringVar(&options.ConfigFilePath, "config", options.ConfigFilePath, "Location of the master configuration file to run from.")
 	cmd.MarkFlagFilename("config", "yaml", "yml")
 	flags.StringVar(&options.KubeConfigFile, "kubeconfig", options.KubeConfigFile, "Location of the master configuration file to run from.")
+	flags.StringVar(&options.ClientCAFile, "client-ca-file", options.ClientCAFile, "Location of the client-ca file to run from.")
+	flags.StringVar(&options.TLSCertFile, "tls-cert-file", options.TLSCertFile, "Location of the tls cert file to run from.")
+	flags.StringVar(&options.TLSPrivateKeyFile, "tls-private-key-file", options.TLSPrivateKeyFile, "Location of the tls key file to run from.")
 	cmd.MarkFlagFilename("kubeconfig", "kubeconfig")
+	cmd.MarkFlagFilename("client-ca-file", "client-ca-file")
+	cmd.MarkFlagFilename("tls-cert-file", "tls-cert-file")
+	cmd.MarkFlagFilename("tls-private-key-file", "tls-private-key-file")
 
 	return cmd
 }
@@ -124,6 +134,15 @@ func (o *ClusterPolicyController) RunPolicyController() error {
 	}
 
 	setRecommendedOpenShiftControllerConfigDefaults(config)
+	if len(o.TLSCertFile) != 0 {
+		config.ServingInfo.ServingInfo.CertInfo.CertFile = o.TLSCertFile
+	}
+	if len(o.TLSPrivateKeyFile) != 0 {
+		config.ServingInfo.ServingInfo.CertInfo.KeyFile = o.TLSPrivateKeyFile
+	}
+	if len(o.ClientCAFile) != 0 {
+		config.ServingInfo.ServingInfo.ClientCA = o.ClientCAFile
+	}
 
 	clientConfig, err := helpers.GetKubeConfigOrInClusterConfig(o.ConfigFilePath, config.KubeClientConfig.ConnectionOverrides)
 	if err != nil {
