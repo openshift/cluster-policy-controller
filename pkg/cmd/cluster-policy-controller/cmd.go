@@ -28,7 +28,10 @@ const RecommendedStartControllerName = "cluster-policy-controller"
 
 type ClusterPolicyController struct {
 	ConfigFilePath string
-	Output         io.Writer
+	// KubeConfigFile points to a kubeconfig file if you don't want to use the in cluster config
+	KubeConfigFile string
+
+	Output io.Writer
 }
 
 var longDescription = templates.LongDesc(`
@@ -63,6 +66,8 @@ func NewClusterPolicyControllerCommand(name string, out, errout io.Writer) *cobr
 	// This command only supports reading from config
 	flags.StringVar(&options.ConfigFilePath, "config", options.ConfigFilePath, "Location of the master configuration file to run from.")
 	cmd.MarkFlagFilename("config", "yaml", "yml")
+	flags.StringVar(&options.KubeConfigFile, "kubeconfig", options.KubeConfigFile, "Location of the master configuration file to run from.")
+	cmd.MarkFlagFilename("kubeconfig", "kubeconfig")
 
 	return cmd
 }
@@ -120,7 +125,7 @@ func (o *ClusterPolicyController) RunPolicyController() error {
 
 	setRecommendedOpenShiftControllerConfigDefaults(config)
 
-	clientConfig, err := helpers.GetKubeClientConfig(config.KubeClientConfig)
+	clientConfig, err := helpers.GetKubeConfigOrInClusterConfig(o.ConfigFilePath, config.KubeClientConfig.ConnectionOverrides)
 	if err != nil {
 		return err
 	}
