@@ -23,7 +23,6 @@ import (
 
 	openshiftcontrolplanev1 "github.com/openshift/api/openshiftcontrolplane/v1"
 	origincontrollers "github.com/openshift/cluster-policy-controller/pkg/cmd/controller"
-	"github.com/openshift/cluster-policy-controller/pkg/version"
 
 	// for metrics
 	_ "k8s.io/kubernetes/pkg/client/metrics/prometheus"
@@ -34,15 +33,6 @@ func RunClusterPolicyController(config *openshiftcontrolplanev1.OpenShiftControl
 	kubeClient, err := kubernetes.NewForConfig(clientConfig)
 	if err != nil {
 		return err
-	}
-
-	// only serve if we have serving information.
-	if config.ServingInfo != nil {
-		klog.Infof("Starting controllers on %s (%s)", config.ServingInfo.BindAddress, version.Get().String())
-
-		if err := origincontrollers.RunControllerServer(*config.ServingInfo, kubeClient); err != nil {
-			return err
-		}
 	}
 
 	originControllerManager := func(ctx context.Context) {
