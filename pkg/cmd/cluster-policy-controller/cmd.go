@@ -125,7 +125,7 @@ func (o *ClusterPolicyController) RunPolicyController() error {
 
 	setRecommendedOpenShiftControllerConfigDefaults(config)
 
-	clientConfig, err := helpers.GetKubeConfigOrInClusterConfig(o.ConfigFilePath, config.KubeClientConfig.ConnectionOverrides)
+	clientConfig, err := helpers.GetKubeConfigOrInClusterConfig(config.KubeClientConfig.KubeConfig, config.KubeClientConfig.ConnectionOverrides)
 	if err != nil {
 		return err
 	}
