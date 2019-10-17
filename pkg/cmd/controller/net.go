@@ -2,10 +2,14 @@ package controller
 
 import (
 	"crypto/tls"
+	"fmt"
 	"net"
 	"net/http"
+	"os"
 	"strings"
 	"time"
+
+	certutil "k8s.io/client-go/util/cert"
 )
 
 // tcpKeepAliveListener sets TCP keep-alive timeouts on accepted
@@ -43,9 +47,24 @@ func ListenAndServeTLS(srv *http.Server, network string, certFile, keyFile strin
 
 	var err error
 	config.Certificates = make([]tls.Certificate, 1)
-	config.Certificates[0], err = tls.LoadX509KeyPair(certFile, keyFile)
-	if err != nil {
-		return err
+
+	if _, err := os.Open(certFile); err == nil {
+		config.Certificates[0], err = tls.LoadX509KeyPair(certFile, keyFile)
+		if err != nil {
+			return err
+		}
+
+	} else if os.IsNotExist(err) {
+		// if the file doesn't exist, we will generate a serving cert/key pair
+		cert, key, err := certutil.GenerateSelfSignedCertKeyWithFixtures("localhost", nil, nil, "")
+		if err != nil {
+			return fmt.Errorf("unable to generate self signed cert: %v", err)
+		}
+
+		config.Certificates[0], err = tls.X509KeyPair(cert, key)
+		if err != nil {
+			return fmt.Errorf("unable to generate self signed cert: %v", err)
+		}
 	}
 
 	ln, err := net.Listen(network, addr)
