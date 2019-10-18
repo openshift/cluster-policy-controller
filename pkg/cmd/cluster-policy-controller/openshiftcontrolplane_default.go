@@ -12,7 +12,7 @@ import (
 func setRecommendedOpenShiftControllerConfigDefaults(config *openshiftcontrolplanev1.OpenShiftControllerManagerConfig) {
 	configdefaults.SetRecommendedHTTPServingInfoDefaults(config.ServingInfo)
 	configdefaults.SetRecommendedKubeClientConfigDefaults(&config.KubeClientConfig)
-	config.LeaderElection = leaderelectionconverter.LeaderElectionDefaulting(config.LeaderElection, "kube-system", "openshift-master-controllers")
+	config.LeaderElection = leaderelectionconverter.LeaderElectionDefaulting(config.LeaderElection, "openshift-kube-controller-manager", "cluster-policy-controller")
 
 	configdefaults.DefaultStringSlice(&config.Controllers, []string{"*"})
 
