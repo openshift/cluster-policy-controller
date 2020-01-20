@@ -26,7 +26,7 @@ import (
 	"github.com/openshift/cluster-policy-controller/pkg/version"
 
 	// for metrics
-	_ "k8s.io/kubernetes/pkg/client/metrics/prometheus"
+	_ "k8s.io/component-base/metrics/prometheus/restclient"
 )
 
 func RunClusterPolicyController(config *openshiftcontrolplanev1.OpenShiftControllerManagerConfig, clientConfig *rest.Config) error {
