@@ -126,3 +126,10 @@ require (
 	sigs.k8s.io/structured-merge-diff v0.0.0-20190302045857-e85c7b244fd2
 	sigs.k8s.io/yaml v1.1.0
 )
+
+replace (
+	bitbucket.org/ww/goautoneg => github.com/munnerz/goautoneg v0.0.0-20120707110453-a547fc61f48d
+	github.com/jteeuwen/go-bindata => github.com/jteeuwen/go-bindata v3.0.8-0.20151023091102-a0ff2567cfb7+incompatible
+	github.com/onsi/ginkgo => github.com/openshift/onsi-ginkgo release-v1.2.0
+	github.com/golang/glog => github.com/openshift/golang-glog delegate-to-klog
+)
