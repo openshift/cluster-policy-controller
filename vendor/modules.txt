@@ -390,7 +390,7 @@ gopkg.in/square/go-jose.v2
 gopkg.in/square/go-jose.v2/cipher
 gopkg.in/square/go-jose.v2/json
 gopkg.in/square/go-jose.v2/jwt
-# gopkg.in/yaml.v2 v2.2.4
+# gopkg.in/yaml.v2 v2.2.8
 gopkg.in/yaml.v2
 # honnef.co/go/tools v0.0.1-2019.2.3
 honnef.co/go/tools/arg
@@ -418,7 +418,7 @@ honnef.co/go/tools/staticcheck/vrp
 honnef.co/go/tools/stylecheck
 honnef.co/go/tools/unused
 honnef.co/go/tools/version
-# k8s.io/api v0.17.1 => k8s.io/api v0.17.1
+# k8s.io/api v0.17.3 => k8s.io/api v0.17.3
 k8s.io/api/admission/v1
 k8s.io/api/admission/v1beta1
 k8s.io/api/admissionregistration/v1
@@ -461,9 +461,9 @@ k8s.io/api/settings/v1alpha1
 k8s.io/api/storage/v1
 k8s.io/api/storage/v1alpha1
 k8s.io/api/storage/v1beta1
-# k8s.io/apiextensions-apiserver v0.17.1 => k8s.io/apiextensions-apiserver v0.17.1
+# k8s.io/apiextensions-apiserver v0.17.1 => k8s.io/apiextensions-apiserver v0.17.3
 k8s.io/apiextensions-apiserver/pkg/features
-# k8s.io/apimachinery v0.17.1 => k8s.io/apimachinery v0.17.1
+# k8s.io/apimachinery v0.17.3 => k8s.io/apimachinery v0.17.3
 k8s.io/apimachinery/pkg/api/equality
 k8s.io/apimachinery/pkg/api/errors
 k8s.io/apimachinery/pkg/api/meta
@@ -519,7 +519,7 @@ k8s.io/apimachinery/pkg/watch
 k8s.io/apimachinery/third_party/forked/golang/json
 k8s.io/apimachinery/third_party/forked/golang/netutil
 k8s.io/apimachinery/third_party/forked/golang/reflect
-# k8s.io/apiserver v0.17.1 => k8s.io/apiserver v0.17.1
+# k8s.io/apiserver v0.17.3 => k8s.io/apiserver v0.17.3
 k8s.io/apiserver/pkg/admission
 k8s.io/apiserver/pkg/admission/configuration
 k8s.io/apiserver/pkg/admission/initializer
@@ -603,7 +603,7 @@ k8s.io/apiserver/pkg/util/webhook
 k8s.io/apiserver/pkg/util/wsstream
 k8s.io/apiserver/plugin/pkg/authenticator/token/webhook
 k8s.io/apiserver/plugin/pkg/authorizer/webhook
-# k8s.io/client-go v0.17.1 => k8s.io/client-go v0.17.1
+# k8s.io/client-go v0.17.3 => github.com/openshift/kubernetes-client-go v0.0.0-20200311172228-26b66ee099f0
 k8s.io/client-go/discovery
 k8s.io/client-go/discovery/cached
 k8s.io/client-go/discovery/cached/memory
@@ -822,7 +822,7 @@ k8s.io/client-go/util/homedir
 k8s.io/client-go/util/keyutil
 k8s.io/client-go/util/retry
 k8s.io/client-go/util/workqueue
-# k8s.io/component-base v0.17.1 => k8s.io/component-base v0.17.1
+# k8s.io/component-base v0.17.3 => k8s.io/component-base v0.17.3
 k8s.io/component-base/cli/flag
 k8s.io/component-base/config
 k8s.io/component-base/featuregate
@@ -840,11 +840,11 @@ k8s.io/kube-openapi/pkg/handler
 k8s.io/kube-openapi/pkg/schemaconv
 k8s.io/kube-openapi/pkg/util
 k8s.io/kube-openapi/pkg/util/proto
-# k8s.io/kubectl v0.0.0 => k8s.io/kubectl v0.17.1
+# k8s.io/kubectl v0.17.3 => k8s.io/kubectl v0.17.3
 k8s.io/kubectl/pkg/util/interrupt
 k8s.io/kubectl/pkg/util/templates
 k8s.io/kubectl/pkg/util/term
-# k8s.io/kubernetes v1.17.1
+# k8s.io/kubernetes v1.17.3
 k8s.io/kubernetes/cmd/controller-manager/app
 k8s.io/kubernetes/pkg/api/legacyscheme
 k8s.io/kubernetes/pkg/api/service
