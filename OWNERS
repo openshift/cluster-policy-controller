@@ -11,3 +11,4 @@ approvers:
   - soltysh
   - deads2k
   - sttts
+component: "kube-controller-manager"
