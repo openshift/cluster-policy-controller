@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"context"
 	"fmt"
 	"math/big"
 	"reflect"
@@ -142,7 +143,7 @@ func (c *NamespaceSCCAllocationController) allocate(ns *corev1.Namespace) error 
 
 	// if we don't have the current state, go get it
 	if c.currentUIDRangeAllocation == nil {
-		newRange, err := c.rangeAllocationClient.RangeAllocations().Get(rangeName, metav1.GetOptions{})
+		newRange, err := c.rangeAllocationClient.RangeAllocations().Get(context.TODO(), rangeName, metav1.GetOptions{})
 		if err != nil {
 			return err
 		}
@@ -168,7 +169,7 @@ func (c *NamespaceSCCAllocationController) allocate(ns *corev1.Namespace) error 
 	newRangeAllocation := c.currentUIDRangeAllocation.DeepCopy()
 	newRangeAllocation.Data = allocatedBitMapInt.Bytes()
 
-	actualRangeAllocation, err := c.rangeAllocationClient.RangeAllocations().Update(newRangeAllocation)
+	actualRangeAllocation, err := c.rangeAllocationClient.RangeAllocations().Update(context.TODO(), newRangeAllocation, metav1.UpdateOptions{})
 	if err != nil {
 		return err
 	}
@@ -204,7 +205,7 @@ func (c *NamespaceSCCAllocationController) allocate(ns *corev1.Namespace) error 
 		return err
 	}
 	// use patch here not to conflict with other actors
-	_, err = c.namespaceClient.Patch(ns.Name, types.StrategicMergePatchType, patchBytes)
+	_, err = c.namespaceClient.Patch(context.TODO(), ns.Name, types.StrategicMergePatchType, patchBytes, metav1.PatchOptions{})
 	if apierrors.IsNotFound(err) {
 		return nil
 	}
@@ -250,7 +251,7 @@ func (c *NamespaceSCCAllocationController) Repair() error {
 	// See #8295
 
 	// get the curr so we have a resourceVersion to pin to
-	uidRange, err := c.rangeAllocationClient.RangeAllocations().Get(rangeName, metav1.GetOptions{})
+	uidRange, err := c.rangeAllocationClient.RangeAllocations().Get(context.TODO(), rangeName, metav1.GetOptions{})
 	needCreate := apierrors.IsNotFound(err)
 	if err != nil && !needCreate {
 		return err
@@ -297,13 +298,13 @@ func (c *NamespaceSCCAllocationController) Repair() error {
 	uidRange.Data = newRangeAllocation.Data
 
 	if needCreate {
-		if _, err := c.rangeAllocationClient.RangeAllocations().Create(uidRange); err != nil {
+		if _, err := c.rangeAllocationClient.RangeAllocations().Create(context.TODO(), uidRange, metav1.CreateOptions{}); err != nil {
 			return err
 		}
 		return nil
 	}
 
-	if _, err := c.rangeAllocationClient.RangeAllocations().Update(uidRange); err != nil {
+	if _, err := c.rangeAllocationClient.RangeAllocations().Update(context.TODO(), uidRange, metav1.UpdateOptions{}); err != nil {
 		return err
 	}
 
