@@ -8,6 +8,9 @@ import (
 	"time"
 
 	"github.com/openshift/library-go/pkg/serviceability"
+	authorizationv1 "k8s.io/api/authorization/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	authorizationv1client "k8s.io/client-go/kubernetes/typed/authorization/v1"
 
 	"k8s.io/klog"
 
@@ -47,6 +50,9 @@ func RunClusterPolicyController(config *openshiftcontrolplanev1.OpenShiftControl
 
 	originControllerManager := func(ctx context.Context) {
 		if err := WaitForHealthyAPIServer(kubeClient.Discovery().RESTClient()); err != nil {
+			klog.Fatal(err)
+		}
+		if err := WaitForAuthorizationUpdate(kubeClient.AuthorizationV1()); err != nil {
 			klog.Fatal(err)
 		}
 
@@ -117,6 +123,35 @@ func WaitForHealthyAPIServer(client rest.Interface) error {
 	})
 	if err != nil {
 		return fmt.Errorf("server unhealthy: %v: %v", healthzContent, err)
+	}
+
+	return nil
+}
+
+func WaitForAuthorizationUpdate(client authorizationv1client.SubjectAccessReviewsGetter) error {
+	review := &authorizationv1.SubjectAccessReview{
+		Spec: authorizationv1.SubjectAccessReviewSpec{
+			ResourceAttributes: &authorizationv1.ResourceAttributes{
+				Group:     "",
+				Verb:      "get",
+				Resource:  "configmaps",
+				Namespace: "openshift-kube-controller-manager",
+			},
+			User: "system:kube-controller-manager",
+		},
+	}
+	if err := wait.PollImmediate(time.Second, 2*time.Minute, func() (bool, error) {
+		response, err := client.SubjectAccessReviews().Create(context.TODO(), review, metav1.CreateOptions{})
+		if err != nil {
+			return false, err
+		}
+		if !response.Status.Allowed {
+			klog.Infof("Waiting for system:kube-controller-manager to be able to access configmaps... ")
+			return false, nil
+		}
+		return true, nil
+	}); err != nil {
+		return fmt.Errorf("server missing RBAC policy for system:kube-controller-manager: %v", err)
 	}
 
 	return nil
