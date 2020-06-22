@@ -11,6 +11,7 @@ require (
 	github.com/google/go-cmp v0.4.0 // indirect
 	github.com/gorilla/websocket v1.4.1 // indirect
 	github.com/grpc-ecosystem/go-grpc-middleware v1.1.0 // indirect
+	github.com/libp2p/go-reuseport v0.0.1
 	github.com/onsi/gomega v1.8.1 // indirect
 	github.com/openshift/api v0.0.0-20200429152225-b98a784d8e6d
 	github.com/openshift/build-machinery-go v0.0.0-20200512074546-3744767c4131
