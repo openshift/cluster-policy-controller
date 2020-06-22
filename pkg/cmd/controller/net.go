@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	reuse "github.com/libp2p/go-reuseport"
 	certutil "k8s.io/client-go/util/cert"
 )
 
@@ -67,7 +68,7 @@ func ListenAndServeTLS(srv *http.Server, network string, certFile, keyFile strin
 		}
 	}
 
-	ln, err := net.Listen(network, addr)
+	ln, err := reuse.Listen(network, addr)
 	if err != nil {
 		return err
 	}
