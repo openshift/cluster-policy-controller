@@ -6,19 +6,23 @@ import (
 	"reflect"
 	"time"
 
-	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/apimachinery/pkg/util/wait"
-	"k8s.io/klog"
-
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/serializer"
+	runtimejson "k8s.io/apimachinery/pkg/runtime/serializer/json"
+	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	"k8s.io/apimachinery/pkg/util/strategicpatch"
+	"k8s.io/apimachinery/pkg/util/wait"
 	corev1informers "k8s.io/client-go/informers/core/v1"
 	corev1client "k8s.io/client-go/kubernetes/typed/core/v1"
 	corev1listers "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/util/workqueue"
+	"k8s.io/klog"
 	coreapi "k8s.io/kubernetes/pkg/apis/core"
 	"k8s.io/kubernetes/pkg/controller"
 
@@ -46,6 +50,8 @@ type NamespaceSCCAllocationController struct {
 	rangeAllocationClient securityv1client.RangeAllocationsGetter
 
 	queue workqueue.RateLimitingInterface
+
+	encoder runtime.Encoder
 }
 
 func NewNamespaceSCCAllocationController(
@@ -55,6 +61,13 @@ func NewNamespaceSCCAllocationController(
 	requiredUIDRange *uid.Range,
 	mcs MCSAllocationFunc,
 ) *NamespaceSCCAllocationController {
+
+	scheme := runtime.NewScheme()
+	utilruntime.Must(corev1.AddToScheme(scheme))
+	codecs := serializer.NewCodecFactory(scheme)
+	jsonSerializer := runtimejson.NewSerializer(runtimejson.DefaultMetaFactory, scheme, scheme, false)
+	encoder := codecs.EncoderForVersion(jsonSerializer, corev1.SchemeGroupVersion)
+
 	c := &NamespaceSCCAllocationController{
 		requiredUIDRange:      requiredUIDRange,
 		mcsAllocator:          mcs,
@@ -63,6 +76,7 @@ func NewNamespaceSCCAllocationController(
 		nsLister:              namespaceInformer.Lister(),
 		nsListerSynced:        namespaceInformer.Informer().HasSynced,
 		queue:                 workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), controllerName),
+		encoder:               encoder,
 	}
 
 	namespaceInformer.Informer().AddEventHandlerWithResyncPeriod(
@@ -178,8 +192,20 @@ func (c *NamespaceSCCAllocationController) allocate(ns *corev1.Namespace) error 
 			nsCopy.Annotations[securityv1.MCSAnnotation] = label.String()
 		}
 	}
-
-	_, err = c.namespaceClient.Update(nsCopy)
+	nsCopyBytes, err := runtime.Encode(c.encoder, nsCopy)
+	if err != nil {
+		return err
+	}
+	nsBytes, err := runtime.Encode(c.encoder, ns)
+	if err != nil {
+		return err
+	}
+	patchBytes, err := strategicpatch.CreateTwoWayMergePatch(nsBytes, nsCopyBytes, &corev1.Namespace{})
+	if err != nil {
+		return err
+	}
+	// use patch here not to conflict with other actors
+	_, err = c.namespaceClient.Patch(ns.Name, types.StrategicMergePatchType, patchBytes)
 	if apierrors.IsNotFound(err) {
 		return nil
 	}
