@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"errors"
 	"fmt"
 	"math/big"
 	"reflect"
@@ -21,6 +22,7 @@ import (
 	corev1client "k8s.io/client-go/kubernetes/typed/core/v1"
 	corev1listers "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/tools/cache"
+	"k8s.io/client-go/tools/record"
 	"k8s.io/client-go/util/workqueue"
 	"k8s.io/klog"
 	coreapi "k8s.io/kubernetes/pkg/apis/core"
@@ -53,6 +55,8 @@ type NamespaceSCCAllocationController struct {
 	queue workqueue.RateLimitingInterface
 
 	encoder runtime.Encoder
+
+	eventRecorder record.EventRecorder
 }
 
 func NewNamespaceSCCAllocationController(
@@ -61,6 +65,7 @@ func NewNamespaceSCCAllocationController(
 	rangeAllocationClient securityv1client.RangeAllocationsGetter,
 	requiredUIDRange *uid.Range,
 	mcs MCSAllocationFunc,
+	eventsBroadcaster record.EventBroadcaster,
 ) *NamespaceSCCAllocationController {
 
 	scheme := runtime.NewScheme()
@@ -78,6 +83,7 @@ func NewNamespaceSCCAllocationController(
 		nsListerSynced:        namespaceInformer.Informer().HasSynced,
 		queue:                 workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), controllerName),
 		encoder:               encoder,
+		eventRecorder:         eventsBroadcaster.NewRecorder(scheme, corev1.EventSource{Component: controllerName}),
 	}
 
 	namespaceInformer.Informer().AddEventHandlerWithResyncPeriod(
@@ -292,8 +298,9 @@ func (c *NamespaceSCCAllocationController) Repair() error {
 		case uidallocator.ErrNotInRange, uidallocator.ErrAllocated:
 			continue
 		case uidallocator.ErrFull:
-			// TODO: send event
-			return fmt.Errorf("the UID range %s is full; you must widen the range in order to allocate more UIDs", c.requiredUIDRange)
+			msg := fmt.Sprintf("the UID range %s is full; you must widen the range in order to allocate more UIDs", c.requiredUIDRange)
+			c.eventRecorder.Event(uidRange, corev1.EventTypeWarning, "UIDRangeFull", msg)
+			return errors.New(msg)
 		default:
 			return fmt.Errorf("unable to allocate UID block %s for namespace %s due to an unknown error, exiting: %v", block, ns.Name, err)
 		}
