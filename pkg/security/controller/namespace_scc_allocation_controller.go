@@ -239,7 +239,13 @@ func (c *NamespaceSCCAllocationController) AddNextPeriodicRepair() {
 	// For this controller to work correctly we need to ensure a periodic repair
 	// of all the range allocations. For that we are adding an artificial key
 	// which will trigger that every 8 hours.
-	delta := time.Duration(8 * time.Hour)
+
+	// ****************************************************************************
+	// For the development cycle, make the periodic repair faster (every 5 minutes)
+	delta := time.Duration(5 * time.Minute)
+	// This must be reverted before we ship
+	// ****************************************************************************
+
 	c.queue.AddAfter(periodicRepairKey, delta)
 	klog.V(1).Infof("Adding next periodic repair on %s", time.Now().Add(delta))
 }
