@@ -58,7 +58,7 @@ func RunControllerServer(servingInfo configv1.HTTPServingInfo, kubeExternal clie
 	authz := newBypassAuthorizer(remoteAuthz, "/healthz", "/healthz/ready")
 	handler := apifilters.WithAuthorization(mux, authz, legacyscheme.Codecs)
 	// TODO need audiences
-	handler = apifilters.WithAuthentication(handler, authn, apifilters.Unauthorized(legacyscheme.Codecs, false), nil)
+	handler = apifilters.WithAuthentication(handler, authn, apifilters.Unauthorized(legacyscheme.Codecs), nil)
 	handler = apiserverfilters.WithPanicRecovery(handler)
 	handler = apifilters.WithRequestInfo(handler, requestInfoResolver)
 
