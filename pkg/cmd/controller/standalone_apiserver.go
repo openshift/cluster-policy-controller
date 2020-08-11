@@ -8,7 +8,7 @@ import (
 
 	"k8s.io/client-go/util/cert"
 
-	"k8s.io/klog"
+	"k8s.io/klog/v2"
 
 	utilwait "k8s.io/apimachinery/pkg/util/wait"
 	apifilters "k8s.io/apiserver/pkg/endpoints/filters"
