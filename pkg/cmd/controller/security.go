@@ -3,6 +3,10 @@ package controller
 import (
 	"fmt"
 
+	corev1client "k8s.io/client-go/kubernetes/typed/core/v1"
+	"k8s.io/client-go/tools/record"
+	"k8s.io/klog"
+
 	sccallocation "github.com/openshift/cluster-policy-controller/pkg/security/controller"
 	"github.com/openshift/cluster-policy-controller/pkg/security/mcs"
 	"github.com/openshift/library-go/pkg/security/uid"
@@ -27,12 +31,17 @@ func RunNamespaceSecurityAllocationController(ctx *ControllerContext) (bool, err
 		return true, err
 	}
 
+	eventBroadcaster := record.NewBroadcaster()
+	eventBroadcaster.StartLogging(klog.Infof)
+	eventBroadcaster.StartRecordingToSink(&corev1client.EventSinkImpl{Interface: kubeClient.CoreV1().Events("")})
+
 	controller := sccallocation.NewNamespaceSCCAllocationController(
 		ctx.KubernetesInformers.Core().V1().Namespaces(),
 		kubeClient.CoreV1().Namespaces(),
 		securityClient.SecurityV1(),
 		uidRange,
 		sccallocation.DefaultMCSAllocation(uidRange, mcsRange, ctx.OpenshiftControllerConfig.SecurityAllocator.MCSLabelsPerProject),
+		eventBroadcaster,
 	)
 	go controller.Run(ctx.Stop)
 

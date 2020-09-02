@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"errors"
 	"fmt"
 	"math/big"
 	"reflect"
@@ -21,6 +22,7 @@ import (
 	corev1client "k8s.io/client-go/kubernetes/typed/core/v1"
 	corev1listers "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/tools/cache"
+	"k8s.io/client-go/tools/record"
 	"k8s.io/client-go/util/workqueue"
 	"k8s.io/klog"
 	coreapi "k8s.io/kubernetes/pkg/apis/core"
@@ -34,8 +36,9 @@ import (
 )
 
 const (
-	controllerName = "namespace-security-allocation-controller"
-	rangeName      = "scc-uid"
+	controllerName    = "namespace-security-allocation-controller"
+	rangeName         = "scc-uid"
+	periodicRepairKey = "__internal/periodicRepair"
 )
 
 // NamespaceSCCAllocationController allocates uids/labels for namespaces
@@ -52,6 +55,8 @@ type NamespaceSCCAllocationController struct {
 	queue workqueue.RateLimitingInterface
 
 	encoder runtime.Encoder
+
+	eventRecorder record.EventRecorder
 }
 
 func NewNamespaceSCCAllocationController(
@@ -60,6 +65,7 @@ func NewNamespaceSCCAllocationController(
 	rangeAllocationClient securityv1client.RangeAllocationsGetter,
 	requiredUIDRange *uid.Range,
 	mcs MCSAllocationFunc,
+	eventsBroadcaster record.EventBroadcaster,
 ) *NamespaceSCCAllocationController {
 
 	scheme := runtime.NewScheme()
@@ -77,6 +83,7 @@ func NewNamespaceSCCAllocationController(
 		nsListerSynced:        namespaceInformer.Informer().HasSynced,
 		queue:                 workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), controllerName),
 		encoder:               encoder,
+		eventRecorder:         eventsBroadcaster.NewRecorder(scheme, corev1.EventSource{Component: controllerName}),
 	}
 
 	namespaceInformer.Informer().AddEventHandlerWithResyncPeriod(
@@ -109,6 +116,8 @@ func (c *NamespaceSCCAllocationController) Run(stopCh <-chan struct{}) {
 		klog.Fatal(err)
 	}
 	klog.V(1).Infof("Repair complete")
+
+	c.AddNextPeriodicRepair()
 
 	go c.worker()
 	<-stopCh
@@ -226,6 +235,15 @@ func allocateNextContiguousBit(allocated *big.Int, max int) (int, bool) {
 	return 0, false
 }
 
+func (c *NamespaceSCCAllocationController) AddNextPeriodicRepair() {
+	// For this controller to work correctly we need to ensure a periodic repair
+	// of all the range allocations. For that we are adding an artificial key
+	// which will trigger that every 8 hours.
+	delta := time.Duration(8 * time.Hour)
+	c.queue.AddAfter(periodicRepairKey, delta)
+	klog.V(1).Infof("Adding next periodic repair on %s", time.Now().Add(delta))
+}
+
 func (c *NamespaceSCCAllocationController) WaitForRepair(stopCh <-chan struct{}) error {
 	return wait.PollImmediate(10*time.Second, 5*time.Minute, func() (bool, error) {
 		select {
@@ -248,7 +266,7 @@ func (c *NamespaceSCCAllocationController) Repair() error {
 	// the ordering guarantee required to ensure no item is allocated twice is violated.
 	// List must return a ResourceVersion higher than the etcd index Get,
 	// and the release code must not release items that have allocated but not yet been created
-	// See #8295
+	// See https://github.com/kubernetes/kubernetes/issues/8295
 
 	// get the curr so we have a resourceVersion to pin to
 	uidRange, err := c.rangeAllocationClient.RangeAllocations().Get(rangeName, metav1.GetOptions{})
@@ -280,8 +298,9 @@ func (c *NamespaceSCCAllocationController) Repair() error {
 		case uidallocator.ErrNotInRange, uidallocator.ErrAllocated:
 			continue
 		case uidallocator.ErrFull:
-			// TODO: send event
-			return fmt.Errorf("the UID range %s is full; you must widen the range in order to allocate more UIDs", c.requiredUIDRange)
+			msg := fmt.Sprintf("the UID range %s is full; you must widen the range in order to allocate more UIDs", c.requiredUIDRange)
+			c.eventRecorder.Event(uidRange, corev1.EventTypeWarning, "UIDRangeFull", msg)
+			return errors.New(msg)
 		default:
 			return fmt.Errorf("unable to allocate UID block %s for namespace %s due to an unknown error, exiting: %v", block, ns.Name, err)
 		}
@@ -349,7 +368,20 @@ func (c *NamespaceSCCAllocationController) work() bool {
 	if quit {
 		return false
 	}
-	defer c.queue.Done(key)
+	defer func() {
+		if key != periodicRepairKey {
+			c.queue.Done(key)
+		}
+	}()
+
+	if key == periodicRepairKey {
+		if err := c.Repair(); err != nil {
+			utilruntime.HandleError(fmt.Errorf("error during periodic repair: %v", err))
+		}
+		c.queue.Done(key)
+		c.AddNextPeriodicRepair()
+		return true
+	}
 
 	if err := c.syncNamespace(key.(string)); err == nil {
 		// this means the request was successfully handled.  We should "forget" the item so that any retry
