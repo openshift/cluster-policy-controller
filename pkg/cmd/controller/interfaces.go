@@ -33,7 +33,7 @@ import (
 	quotainformer "github.com/openshift/client-go/quota/informers/externalversions"
 	routeclient "github.com/openshift/client-go/route/clientset/versioned"
 	routeinformer "github.com/openshift/client-go/route/informers/externalversions"
-	securityclient "github.com/openshift/client-go/security/clientset/versioned"
+	securityclient "github.com/openshift/client-go/securityinternal/clientset/versioned"
 	templateclient "github.com/openshift/client-go/template/clientset/versioned"
 	templateinformer "github.com/openshift/client-go/template/informers/externalversions"
 	"github.com/openshift/cluster-policy-controller/pkg/client/genericinformers"

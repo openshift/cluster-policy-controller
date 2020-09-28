@@ -4,6 +4,8 @@ import (
 	"math/big"
 	"testing"
 
+	securityinternalv1 "github.com/openshift/api/securityinternal/v1"
+
 	"github.com/davecgh/go-spew/spew"
 
 	corev1 "k8s.io/api/core/v1"
@@ -14,7 +16,7 @@ import (
 	"k8s.io/kubernetes/pkg/controller"
 
 	securityv1 "github.com/openshift/api/security/v1"
-	securityv1fakeclient "github.com/openshift/client-go/security/clientset/versioned/fake"
+	securityv1fakeclient "github.com/openshift/client-go/securityinternal/clientset/versioned/fake"
 	"github.com/openshift/library-go/pkg/security/uid"
 )
 
@@ -46,7 +48,7 @@ func TestRepair(t *testing.T) {
 	if !ok {
 		t.Fatal(spew.Sdump(action))
 	}
-	rangeAllocation := action.GetObject().(*securityv1.RangeAllocation)
+	rangeAllocation := action.GetObject().(*securityinternalv1.RangeAllocation)
 
 	if rangeAllocation.Range != "10-20/2" {
 		t.Errorf("didn't store range properly: %#v", rangeAllocation.Range)
@@ -88,7 +90,7 @@ func TestRepairIgnoresMismatch(t *testing.T) {
 	if !ok {
 		t.Fatal(spew.Sdump(action))
 	}
-	rangeAllocation := action.GetObject().(*securityv1.RangeAllocation)
+	rangeAllocation := action.GetObject().(*securityinternalv1.RangeAllocation)
 
 	if rangeAllocation.Range != "10-20/2" {
 		t.Errorf("didn't store range properly: %#v", rangeAllocation.Range)
@@ -103,7 +105,7 @@ func TestRepairTable(t *testing.T) {
 	tests := []struct {
 		name                    string
 		namespaces              []*corev1.Namespace
-		existingRangeAllocation *securityv1.RangeAllocation
+		existingRangeAllocation *securityinternalv1.RangeAllocation
 		uidRange                string
 		expectedRange           string
 		expectedData            *big.Int
@@ -132,7 +134,7 @@ func TestRepairTable(t *testing.T) {
 					Annotations: map[string]string{securityv1.UIDRangeAnnotation: "25/5"},
 				}},
 			},
-			existingRangeAllocation: &securityv1.RangeAllocation{
+			existingRangeAllocation: &securityinternalv1.RangeAllocation{
 				ObjectMeta: metav1.ObjectMeta{Name: "default"},
 				Range:      "10-20/2",
 			},
@@ -176,20 +178,20 @@ func TestRepairTable(t *testing.T) {
 				t.Fatal(spew.Sdump(action))
 			}
 
-			var actualRangeAllocation *securityv1.RangeAllocation
+			var actualRangeAllocation *securityinternalv1.RangeAllocation
 			if test.existingRangeAllocation != nil {
 				action, ok := rangeAllocationActions[1].(clientgotesting.UpdateAction)
 				if !ok {
 					t.Fatal(spew.Sdump(action))
 				}
-				actualRangeAllocation = action.GetObject().(*securityv1.RangeAllocation)
+				actualRangeAllocation = action.GetObject().(*securityinternalv1.RangeAllocation)
 
 			} else {
 				action, ok := rangeAllocationActions[1].(clientgotesting.CreateAction)
 				if !ok {
 					t.Fatal(spew.Sdump(action))
 				}
-				actualRangeAllocation = action.GetObject().(*securityv1.RangeAllocation)
+				actualRangeAllocation = action.GetObject().(*securityinternalv1.RangeAllocation)
 			}
 
 			if actualRangeAllocation.Range != test.expectedRange {

@@ -22,7 +22,8 @@ import (
 	"k8s.io/kubernetes/pkg/controller"
 
 	securityv1 "github.com/openshift/api/security/v1"
-	securityv1fakeclient "github.com/openshift/client-go/security/clientset/versioned/fake"
+	securityinternalv1 "github.com/openshift/api/securityinternal/v1"
+	securityv1fakeclient "github.com/openshift/client-go/securityinternal/clientset/versioned/fake"
 	"github.com/openshift/cluster-policy-controller/pkg/security/mcs"
 	"github.com/openshift/library-go/pkg/security/uid"
 )
@@ -100,7 +101,7 @@ func TestController(t *testing.T) {
 	if action, ok := rangeAllocationActions[0].(clientgotesting.GetAction); !ok {
 		t.Fatal(spew.Sdump(action))
 	}
-	actualRange := rangeAllocationActions[1].(clientgotesting.UpdateAction).GetObject().(*securityv1.RangeAllocation)
+	actualRange := rangeAllocationActions[1].(clientgotesting.UpdateAction).GetObject().(*securityinternalv1.RangeAllocation)
 	actualAllocatedInt := big.NewInt(0).SetBytes(actualRange.Data)
 	if actualAllocatedInt.Uint64() != 1 {
 		t.Errorf("did not allocate uid: %d", actualAllocatedInt.Uint64())
