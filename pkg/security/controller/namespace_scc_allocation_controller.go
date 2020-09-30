@@ -29,7 +29,8 @@ import (
 	coreapi "k8s.io/kubernetes/pkg/apis/core"
 
 	securityv1 "github.com/openshift/api/security/v1"
-	securityv1client "github.com/openshift/client-go/security/clientset/versioned/typed/security/v1"
+	securityinternalv1 "github.com/openshift/api/securityinternal/v1"
+	securityv1client "github.com/openshift/client-go/securityinternal/clientset/versioned/typed/securityinternal/v1"
 	"github.com/openshift/cluster-policy-controller/pkg/security/mcs"
 	"github.com/openshift/cluster-policy-controller/pkg/security/uidallocator"
 	"github.com/openshift/library-go/pkg/security/uid"
@@ -47,7 +48,7 @@ type NamespaceSCCAllocationController struct {
 	mcsAllocator              MCSAllocationFunc
 	nsLister                  corev1listers.NamespaceLister
 	nsListerSynced            cache.InformerSynced
-	currentUIDRangeAllocation *securityv1.RangeAllocation
+	currentUIDRangeAllocation *securityinternalv1.RangeAllocation
 
 	namespaceClient       corev1client.NamespaceInterface
 	rangeAllocationClient securityv1client.RangeAllocationsGetter
@@ -275,7 +276,7 @@ func (c *NamespaceSCCAllocationController) Repair() error {
 		return err
 	}
 	if needCreate {
-		uidRange = &securityv1.RangeAllocation{ObjectMeta: metav1.ObjectMeta{Name: rangeName}}
+		uidRange = &securityinternalv1.RangeAllocation{ObjectMeta: metav1.ObjectMeta{Name: rangeName}}
 	}
 
 	uids, err := uidallocator.NewInMemory(c.requiredUIDRange)

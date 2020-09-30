@@ -10,18 +10,18 @@ require (
 	github.com/gorilla/websocket v1.4.1 // indirect
 	github.com/grpc-ecosystem/go-grpc-middleware v1.1.0 // indirect
 	github.com/onsi/gomega v1.8.1 // indirect
-	github.com/openshift/api v0.0.0-20200803131051-87466835fcc0
-	github.com/openshift/build-machinery-go v0.0.0-20200731024703-cd7e6e844b55
-	github.com/openshift/client-go v0.0.0-20200729195840-c2b1adc6bed6
+	github.com/openshift/api v0.0.0-20200929171550-c99a4deebbe5
+	github.com/openshift/build-machinery-go v0.0.0-20200819073603-48aa266c95f7
+	github.com/openshift/client-go v0.0.0-20200929181438-91d71ef2122c
 	github.com/openshift/library-go v0.0.0-20200807122248-f5cb4d19a4fe
 	github.com/prometheus/client_golang v1.7.1
 	github.com/spf13/cobra v1.0.0
 	github.com/spf13/pflag v1.0.5
 	go.uber.org/zap v1.13.0 // indirect
-	k8s.io/api v0.19.0-rc.2
-	k8s.io/apimachinery v0.19.0-rc.2
+	k8s.io/api v0.19.0
+	k8s.io/apimachinery v0.19.0
 	k8s.io/apiserver v0.19.0-rc.2
-	k8s.io/client-go v0.19.0-rc.2
+	k8s.io/client-go v0.19.0
 	k8s.io/component-base v0.19.0-rc.2
 	k8s.io/klog/v2 v2.3.0
 	k8s.io/kubernetes v1.19.0-rc.2
