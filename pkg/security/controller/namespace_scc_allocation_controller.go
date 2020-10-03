@@ -222,6 +222,14 @@ func (c *NamespaceSCCAllocationController) allocate(ns *corev1.Namespace) error 
 	if err != nil {
 		return err
 	}
+	// emit event once per namespace.  There aren't many of these, but it will let us know how long it takes from namespace creation
+	// until the SCC ranges are created.  There is a suspicion that this takes a while.
+	c.eventRecorder.Eventf(&corev1.ObjectReference{
+		Kind:      "Namespace",
+		Namespace: ns.Name,
+		Name:      ns.Name,
+	}, corev1.EventTypeNormal, "CreatedSCCRanges", "created SCC ranges")
+
 	success = true
 	return nil
 }
