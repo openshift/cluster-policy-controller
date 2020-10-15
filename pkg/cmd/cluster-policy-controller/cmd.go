@@ -7,20 +7,17 @@ import (
 	"os"
 	"path"
 
-	"github.com/coreos/go-systemd/daemon"
+	configv1 "github.com/openshift/api/config/v1"
+	openshiftcontrolplanev1 "github.com/openshift/api/openshiftcontrolplane/v1"
+	"github.com/openshift/library-go/pkg/config/helpers"
+	"github.com/openshift/library-go/pkg/serviceability"
 	"github.com/spf13/cobra"
-
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/tools/clientcmd/api"
 	"k8s.io/klog/v2"
-
-	configv1 "github.com/openshift/api/config/v1"
-	openshiftcontrolplanev1 "github.com/openshift/api/openshiftcontrolplane/v1"
-	"github.com/openshift/library-go/pkg/config/helpers"
-	"github.com/openshift/library-go/pkg/serviceability"
 )
 
 const RecommendedStartControllerName = "cluster-policy-controller"
@@ -33,7 +30,7 @@ type ClusterPolicyController struct {
 	Output io.Writer
 }
 
-func NewClusterPolicyControllerCommand(name string, out, errout io.Writer) *cobra.Command {
+func NewClusterPolicyControllerCommand(name string, out, errout io.Writer, stopCh <-chan struct{}) *cobra.Command {
 	options := &ClusterPolicyController{Output: out}
 
 	cmd := &cobra.Command{
@@ -42,7 +39,7 @@ func NewClusterPolicyControllerCommand(name string, out, errout io.Writer) *cobr
 		Run: func(c *cobra.Command, args []string) {
 			serviceability.StartProfiler()
 
-			if err := options.StartClusterPolicyController(); err != nil {
+			if err := options.RunPolicyController(stopCh); err != nil {
 				if kerrors.IsInvalid(err) {
 					if details := err.(*kerrors.StatusError).ErrStatus.Details; details != nil {
 						fmt.Fprintf(errout, "Invalid %s %s\n", details.Kind, details.Name)
@@ -67,18 +64,8 @@ func NewClusterPolicyControllerCommand(name string, out, errout io.Writer) *cobr
 	return cmd
 }
 
-// StartClusterPolicyController calls RunPolicyController and then waits forever
-func (o *ClusterPolicyController) StartClusterPolicyController() error {
-	if err := o.RunPolicyController(); err != nil {
-		return err
-	}
-
-	go daemon.SdNotify(false, "READY=1")
-	select {}
-}
-
-// RunPolicyController takes the options and starts the controller
-func (o *ClusterPolicyController) RunPolicyController() error {
+// RunPolicyController takes the options and starts the controller.  blocks until the process is finished or the leader lease is lost
+func (o *ClusterPolicyController) RunPolicyController(stopCh <-chan struct{}) error {
 
 	config := &openshiftcontrolplanev1.OpenShiftControllerManagerConfig{
 		/// this isn't allowed to be nil when by itself.
@@ -124,5 +111,5 @@ func (o *ClusterPolicyController) RunPolicyController() error {
 	if err != nil {
 		return err
 	}
-	return RunClusterPolicyController(config, clientConfig)
+	return RunClusterPolicyController(config, clientConfig, stopCh)
 }
