@@ -29,7 +29,7 @@ import (
 	_ "k8s.io/component-base/metrics/prometheus/restclient"
 )
 
-func RunClusterPolicyController(config *openshiftcontrolplanev1.OpenShiftControllerManagerConfig, clientConfig *rest.Config) error {
+func RunClusterPolicyController(config *openshiftcontrolplanev1.OpenShiftControllerManagerConfig, clientConfig *rest.Config, stopCh <-chan struct{}) error {
 	serviceability.InitLogrusFromKlog()
 	kubeClient, err := kubernetes.NewForConfig(clientConfig)
 	if err != nil {
@@ -82,7 +82,13 @@ func RunClusterPolicyController(config *openshiftcontrolplanev1.OpenShiftControl
 	if err != nil {
 		return err
 	}
-	go leaderelection.RunOrDie(context.Background(),
+	leCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() {
+		<-stopCh
+		cancel()
+	}()
+	leaderelection.RunOrDie(leCtx,
 		leaderelection.LeaderElectionConfig{
 			Lock:          rl,
 			LeaseDuration: config.LeaderElection.LeaseDuration.Duration,
@@ -91,9 +97,18 @@ func RunClusterPolicyController(config *openshiftcontrolplanev1.OpenShiftControl
 			Callbacks: leaderelection.LeaderCallbacks{
 				OnStartedLeading: originControllerManager,
 				OnStoppedLeading: func() {
-					klog.Fatalf("leaderelection lost")
+					select {
+					case <-stopCh:
+						// We were asked to terminate. Exit 0.
+						klog.Info("Requested to terminate. Exiting.")
+						os.Exit(0)
+					default:
+						// We lost the lock.
+						klog.Exitf("leaderelection lost")
+					}
 				},
 			},
+			ReleaseOnCancel: true,
 		})
 
 	return nil
