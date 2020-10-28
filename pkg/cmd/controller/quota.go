@@ -7,8 +7,12 @@ import (
 	"github.com/openshift/cluster-policy-controller/pkg/quota/clusterquotareconciliation"
 	image "github.com/openshift/cluster-policy-controller/pkg/quota/quotaimageexternal"
 	"github.com/openshift/library-go/pkg/quota/clusterquotamapping"
+
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/kubernetes/pkg/controller"
 	kresourcequota "k8s.io/kubernetes/pkg/controller/resourcequota"
+	kquota "k8s.io/kubernetes/pkg/quota/v1"
 	"k8s.io/kubernetes/pkg/quota/v1/generic"
 	quotainstall "k8s.io/kubernetes/pkg/quota/v1/install"
 )
@@ -20,6 +24,8 @@ func RunResourceQuotaManager(ctx *ControllerContext) (bool, error) {
 	saName := "resourcequota-controller"
 	listerFuncForResource := generic.ListerFuncForResourceFunc(ctx.GenericResourceInformer.ForResource)
 	quotaConfiguration := quotainstall.NewQuotaConfigurationForControllers(listerFuncForResource)
+	resourceQuotaControllerClient := ctx.ClientBuilder.ClientOrDie(saName)
+	discoveryFunc := resourceQuotaControllerClient.Discovery().ServerPreferredNamespacedResources
 
 	imageEvaluators := image.NewReplenishmentEvaluators(
 		listerFuncForResource,
@@ -28,7 +34,7 @@ func RunResourceQuotaManager(ctx *ControllerContext) (bool, error) {
 	resourceQuotaRegistry := generic.NewRegistry(imageEvaluators)
 
 	resourceQuotaControllerOptions := &kresourcequota.ResourceQuotaControllerOptions{
-		QuotaClient:               ctx.ClientBuilder.ClientOrDie(saName).CoreV1(),
+		QuotaClient:               resourceQuotaControllerClient.CoreV1(),
 		ResourceQuotaInformer:     ctx.KubernetesInformers.Core().V1().ResourceQuotas(),
 		ResyncPeriod:              controller.StaticResyncPeriodFunc(resourceQuotaSyncPeriod),
 		Registry:                  resourceQuotaRegistry,
@@ -36,6 +42,7 @@ func RunResourceQuotaManager(ctx *ControllerContext) (bool, error) {
 		IgnoredResourcesFunc:      quotaConfiguration.IgnoredResources,
 		InformersStarted:          ctx.InformersStarted,
 		InformerFactory:           ctx.GenericResourceInformer,
+		DiscoveryFunc:             resourceQuotaDiscoveryWrapper(resourceQuotaRegistry, discoveryFunc),
 	}
 	controller, err := kresourcequota.NewResourceQuotaController(resourceQuotaControllerOptions)
 	if err != nil {
@@ -44,6 +51,33 @@ func RunResourceQuotaManager(ctx *ControllerContext) (bool, error) {
 	go controller.Run(concurrentResourceQuotaSyncs, ctx.Stop)
 
 	return true, nil
+}
+
+func resourceQuotaDiscoveryWrapper(registry kquota.Registry, discoveryFunc kresourcequota.NamespacedResourcesFunc) kresourcequota.NamespacedResourcesFunc {
+	return func() ([]*metav1.APIResourceList, error) {
+		discoveryResources, discoveryErr := discoveryFunc()
+		if discoveryErr != nil && len(discoveryResources) == 0 {
+			return nil, discoveryErr
+		}
+
+		interestingResources := []*metav1.APIResourceList{}
+		for _, resourceList := range discoveryResources {
+			gv, err := schema.ParseGroupVersion(resourceList.GroupVersion)
+			if err != nil {
+				return nil, err
+			}
+			for i := range resourceList.APIResources {
+				gr := schema.GroupResource{
+					Group:    gv.Group,
+					Resource: resourceList.APIResources[i].Name,
+				}
+				if evaluator := registry.Get(gr); evaluator != nil {
+					interestingResources = append(interestingResources, resourceList)
+				}
+			}
+		}
+		return interestingResources, nil
+	}
 }
 
 func RunClusterQuotaReconciliationController(ctx *ControllerContext) (bool, error) {
