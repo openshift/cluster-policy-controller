@@ -79,7 +79,7 @@ func NewClusterPolicyControllerCommand(stopCh <-chan struct{}) *cobra.Command {
 			os.Exit(1)
 		},
 	}
-	start := cluster_policy_controller.NewClusterPolicyControllerCommand("start", os.Stdout, os.Stderr)
+	start := cluster_policy_controller.NewClusterPolicyControllerCommand("start", os.Stdout, os.Stderr, stopCh)
 	cmd.AddCommand(start)
 
 	return cmd
