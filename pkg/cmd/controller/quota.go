@@ -25,13 +25,12 @@ func RunResourceQuotaManager(ctx *ControllerContext) (bool, error) {
 	listerFuncForResource := generic.ListerFuncForResourceFunc(ctx.GenericResourceInformer.ForResource)
 	quotaConfiguration := quotainstall.NewQuotaConfigurationForControllers(listerFuncForResource)
 	resourceQuotaControllerClient := ctx.ClientBuilder.ClientOrDie(saName)
-	discoveryFunc := resourceQuotaControllerClient.Discovery().ServerPreferredNamespacedResources
-
 	imageEvaluators := image.NewReplenishmentEvaluators(
 		listerFuncForResource,
 		ctx.ImageInformers.Image().V1().ImageStreams(),
 		ctx.ClientBuilder.OpenshiftImageClientOrDie(saName).ImageV1())
 	resourceQuotaRegistry := generic.NewRegistry(imageEvaluators)
+	discoveryFunc := resourceQuotaDiscoveryWrapper(resourceQuotaRegistry, resourceQuotaControllerClient.Discovery().ServerPreferredNamespacedResources)
 
 	resourceQuotaControllerOptions := &kresourcequota.ResourceQuotaControllerOptions{
 		QuotaClient:               resourceQuotaControllerClient.CoreV1(),
@@ -42,13 +41,14 @@ func RunResourceQuotaManager(ctx *ControllerContext) (bool, error) {
 		IgnoredResourcesFunc:      quotaConfiguration.IgnoredResources,
 		InformersStarted:          ctx.InformersStarted,
 		InformerFactory:           ctx.GenericResourceInformer,
-		DiscoveryFunc:             resourceQuotaDiscoveryWrapper(resourceQuotaRegistry, discoveryFunc),
+		DiscoveryFunc:             discoveryFunc,
 	}
 	controller, err := kresourcequota.NewResourceQuotaController(resourceQuotaControllerOptions)
 	if err != nil {
 		return true, err
 	}
 	go controller.Run(concurrentResourceQuotaSyncs, ctx.Stop)
+	go controller.Sync(discoveryFunc, 30*time.Second, ctx.Stop)
 
 	return true, nil
 }
@@ -125,6 +125,7 @@ func RunClusterQuotaReconciliationController(ctx *ControllerContext) (bool, erro
 
 	go clusterQuotaMappingController.Run(5, ctx.Stop)
 	go clusterQuotaReconciliationController.Run(5, ctx.Stop)
+	go clusterQuotaReconciliationController.Sync(discoveryFunc, 30*time.Second, ctx.Stop)
 
 	return true, nil
 }
