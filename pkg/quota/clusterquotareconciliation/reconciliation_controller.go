@@ -203,11 +203,11 @@ func (c *ClusterQuotaReconcilationController) Sync(discoveryFunc resourcequota.N
 // resyncMonitors starts or stops quota monitors as needed to ensure that all
 // (and only) those resources present in the map are monitored.
 func (c *ClusterQuotaReconcilationController) resyncMonitors(resources map[schema.GroupVersionResource]struct{}) error {
-	if err := c.quotaMonitor.SyncMonitors(resources); err != nil {
-		return err
-	}
+	// SyncMonitors can only fail if there was no Informer for the given gvr
+	err := c.quotaMonitor.SyncMonitors(resources)
+	// this is no-op for already running monitors
 	c.quotaMonitor.StartMonitors()
-	return nil
+	return err
 }
 
 func (c *ClusterQuotaReconcilationController) calculate(quotaName string, namespaceNames ...string) {
@@ -262,14 +262,14 @@ func (c *ClusterQuotaReconcilationController) calculateAll() {
 // It enforces that the syncHandler is never invoked concurrently with the same key.
 func (c *ClusterQuotaReconcilationController) worker() {
 	workFunc := func() bool {
-		c.workerLock.RLock()
-		defer c.workerLock.RUnlock()
-
 		uncastKey, uncastData, quit := c.queue.GetWithData()
 		if quit {
 			return true
 		}
 		defer c.queue.Done(uncastKey)
+
+		c.workerLock.RLock()
+		defer c.workerLock.RUnlock()
 
 		quotaName := uncastKey.(string)
 		quota, err := c.clusterQuotaLister.Get(quotaName)
