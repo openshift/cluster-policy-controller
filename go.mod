@@ -5,6 +5,7 @@ go 1.13
 require (
 	github.com/davecgh/go-spew v1.1.1
 	github.com/go-bindata/go-bindata v3.1.2+incompatible
+	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/google/btree v1.0.1-0.20190326150332-20236160a414 // indirect
 	github.com/grpc-ecosystem/go-grpc-middleware v1.1.0 // indirect
 	github.com/onsi/gomega v1.8.1 // indirect
