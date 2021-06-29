@@ -46,7 +46,7 @@ func RunControllerServer(servingInfo configv1.HTTPServingInfo, kubeExternal clie
 		return err
 	}
 	sarClient := kubeExternal.AuthorizationV1().SubjectAccessReviews()
-	remoteAuthz, err := authzwebhook.NewFromInterface(sarClient, 5*time.Minute, 5*time.Minute)
+	remoteAuthz, err := authzwebhook.NewFromInterface(sarClient, 5*time.Minute, 5*time.Minute, *authzwebhook.DefaultRetryBackoff())
 	if err != nil {
 		return err
 	}
@@ -59,7 +59,7 @@ func RunControllerServer(servingInfo configv1.HTTPServingInfo, kubeExternal clie
 	handler := apifilters.WithAuthorization(mux, authz, legacyscheme.Codecs)
 	// TODO need audiences
 	handler = apifilters.WithAuthentication(handler, authn, apifilters.Unauthorized(legacyscheme.Codecs), nil)
-	handler = apiserverfilters.WithPanicRecovery(handler)
+	handler = apiserverfilters.WithPanicRecovery(handler, requestInfoResolver)
 	handler = apifilters.WithRequestInfo(handler, requestInfoResolver)
 
 	return serveControllers(servingInfo, handler)

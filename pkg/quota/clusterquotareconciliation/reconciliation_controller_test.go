@@ -12,8 +12,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	utildiff "k8s.io/apimachinery/pkg/util/diff"
 	"k8s.io/apimachinery/pkg/util/sets"
+	utilquota "k8s.io/apiserver/pkg/quota/v1"
 	clientgotesting "k8s.io/client-go/testing"
-	utilquota "k8s.io/kubernetes/pkg/quota/v1"
 
 	quotav1 "github.com/openshift/api/quota/v1"
 	fakequotaclient "github.com/openshift/client-go/quota/clientset/versioned/fake"

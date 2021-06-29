@@ -16,8 +16,8 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/restmapper"
-	"k8s.io/kubernetes/cmd/controller-manager/app"
-	"k8s.io/kubernetes/pkg/controller"
+	"k8s.io/controller-manager/app"
+	"k8s.io/controller-manager/pkg/clientbuilder"
 
 	openshiftcontrolplanev1 "github.com/openshift/api/openshiftcontrolplane/v1"
 	appsclient "github.com/openshift/client-go/apps/clientset/versioned"
@@ -101,12 +101,7 @@ func NewControllerContext(config openshiftcontrolplanev1.OpenShiftControllerMana
 		OpenshiftControllerConfig: config,
 
 		ClientBuilder: OpenshiftControllerClientBuilder{
-			ControllerClientBuilder: controller.SAControllerClientBuilder{
-				ClientConfig:         rest.AnonymousClientConfig(clientConfig),
-				CoreClient:           kubeClient.CoreV1(),
-				AuthenticationClient: kubeClient.AuthenticationV1(),
-				Namespace:            defaultOpenShiftInfraNamespace,
-			},
+			ControllerClientBuilder: clientbuilder.NewDynamicClientBuilder(rest.AnonymousClientConfig(clientConfig), kubeClient.CoreV1(), defaultOpenShiftInfraNamespace),
 		},
 		KubernetesInformers:                informers.NewSharedInformerFactory(kubeClient, defaultInformerResyncPeriod),
 		OpenshiftConfigKubernetesInformers: informers.NewSharedInformerFactoryWithOptions(kubeClient, defaultInformerResyncPeriod, informers.WithNamespace("openshift-config")),
@@ -219,7 +214,7 @@ func (c *ControllerContext) IsControllerEnabled(name string) bool {
 }
 
 type ControllerClientBuilder interface {
-	controller.ControllerClientBuilder
+	clientbuilder.ControllerClientBuilder
 
 	OpenshiftAppsClient(name string) (appsclient.Interface, error)
 	OpenshiftAppsClientOrDie(name string) appsclient.Interface
@@ -253,7 +248,7 @@ type ControllerClientBuilder interface {
 type InitFunc func(ctx *ControllerContext) (bool, error)
 
 type OpenshiftControllerClientBuilder struct {
-	controller.ControllerClientBuilder
+	clientbuilder.ControllerClientBuilder
 }
 
 func (b OpenshiftControllerClientBuilder) OpenshiftOperatorClient(name string) (operatorclient.Interface, error) {

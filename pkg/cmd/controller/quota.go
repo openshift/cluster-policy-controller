@@ -10,10 +10,10 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	kquota "k8s.io/apiserver/pkg/quota/v1"
+	"k8s.io/apiserver/pkg/quota/v1/generic"
 	"k8s.io/kubernetes/pkg/controller"
 	kresourcequota "k8s.io/kubernetes/pkg/controller/resourcequota"
-	kquota "k8s.io/kubernetes/pkg/quota/v1"
-	"k8s.io/kubernetes/pkg/quota/v1/generic"
 	quotainstall "k8s.io/kubernetes/pkg/quota/v1/install"
 )
 
@@ -32,7 +32,7 @@ func RunResourceQuotaManager(ctx *ControllerContext) (bool, error) {
 	resourceQuotaRegistry := generic.NewRegistry(imageEvaluators)
 	discoveryFunc := resourceQuotaDiscoveryWrapper(resourceQuotaRegistry, resourceQuotaControllerClient.Discovery().ServerPreferredNamespacedResources)
 
-	resourceQuotaControllerOptions := &kresourcequota.ResourceQuotaControllerOptions{
+	resourceQuotaControllerOptions := &kresourcequota.ControllerOptions{
 		QuotaClient:               resourceQuotaControllerClient.CoreV1(),
 		ResourceQuotaInformer:     ctx.KubernetesInformers.Core().V1().ResourceQuotas(),
 		ResyncPeriod:              controller.StaticResyncPeriodFunc(resourceQuotaSyncPeriod),
@@ -43,7 +43,7 @@ func RunResourceQuotaManager(ctx *ControllerContext) (bool, error) {
 		InformerFactory:           ctx.GenericResourceInformer,
 		DiscoveryFunc:             discoveryFunc,
 	}
-	controller, err := kresourcequota.NewResourceQuotaController(resourceQuotaControllerOptions)
+	controller, err := kresourcequota.NewController(resourceQuotaControllerOptions)
 	if err != nil {
 		return true, err
 	}
