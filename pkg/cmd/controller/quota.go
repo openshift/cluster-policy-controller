@@ -45,12 +45,12 @@ func RunResourceQuotaManager(ctx context.Context, controllerCtx *EnhancedControl
 		InformerFactory:           controllerCtx.GenericResourceInformer,
 		DiscoveryFunc:             discoveryFunc,
 	}
-	controller, err := kresourcequota.NewController(resourceQuotaControllerOptions)
+	ctrl, err := kresourcequota.NewController(resourceQuotaControllerOptions)
 	if err != nil {
 		return true, err
 	}
-	go controller.Run(concurrentResourceQuotaSyncs, ctx.Done())
-	go controller.Sync(discoveryFunc, 30*time.Second, ctx.Done())
+	go ctrl.Run(concurrentResourceQuotaSyncs, ctx.Done())
+	go ctrl.Sync(discoveryFunc, 30*time.Second, ctx.Done())
 
 	return true, nil
 }

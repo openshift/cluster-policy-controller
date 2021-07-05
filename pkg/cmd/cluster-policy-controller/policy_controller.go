@@ -11,9 +11,8 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/klog/v2"
 
-	"github.com/openshift/library-go/pkg/controller/controllercmd"
-
 	origincontrollers "github.com/openshift/cluster-policy-controller/pkg/cmd/controller"
+	"github.com/openshift/library-go/pkg/controller/controllercmd"
 )
 
 func RunClusterPolicyController(ctx context.Context, controllerContext *controllercmd.ControllerContext) error {

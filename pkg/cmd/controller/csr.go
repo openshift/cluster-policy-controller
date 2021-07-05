@@ -19,6 +19,7 @@ const (
 	monitoringLabelKey                = "metrics.openshift.io/csr.subject"
 	monitoringLabelValue              = "prometheus"
 )
+
 func RunCSRApproverController(ctx context.Context, controllerCtx *EnhancedControllerContext) (bool, error) {
 	kubeClient, err := controllerCtx.ClientBuilder.Client(infraClusterCSRApproverControllerServiceAccountName)
 	if err != nil {
