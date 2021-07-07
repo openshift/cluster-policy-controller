@@ -50,7 +50,7 @@ func RunClusterPolicyController(config *openshiftcontrolplanev1.OpenShiftControl
 			klog.Fatal(err)
 		}
 
-		controllerContext, err := origincontrollers.NewControllerContext(*config, clientConfig, ctx.Done())
+		controllerContext, err := origincontrollers.NewControllerContext(*config, clientConfig, ctx)
 		if err != nil {
 			klog.Fatal(err)
 		}

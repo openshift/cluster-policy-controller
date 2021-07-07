@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"context"
 	"sync"
 	"time"
 
@@ -39,11 +40,7 @@ import (
 	"github.com/openshift/cluster-policy-controller/pkg/client/genericinformers"
 )
 
-func NewControllerContext(
-	config openshiftcontrolplanev1.OpenShiftControllerManagerConfig,
-	inClientConfig *rest.Config,
-	stopCh <-chan struct{},
-) (*ControllerContext, error) {
+func NewControllerContext(config openshiftcontrolplanev1.OpenShiftControllerManagerConfig, inClientConfig *rest.Config, ctx context.Context) (*ControllerContext, error) {
 
 	const defaultInformerResyncPeriod = 10 * time.Minute
 	kubeClient, err := kubernetes.NewForConfig(inClientConfig)
@@ -65,7 +62,7 @@ func NewControllerContext(
 	discoveryClient := cacheddiscovery.NewMemCacheClient(kubeClient.Discovery())
 	dynamicRestMapper := restmapper.NewDeferredDiscoveryRESTMapper(discoveryClient)
 	dynamicRestMapper.Reset()
-	go wait.Until(dynamicRestMapper.Reset, 30*time.Second, stopCh)
+	go wait.Until(dynamicRestMapper.Reset, 30*time.Second, ctx.Done())
 
 	appsClient, err := appsclient.NewForConfig(clientConfig)
 	if err != nil {
@@ -122,7 +119,8 @@ func NewControllerContext(
 		QuotaInformers:                     quotainformer.NewSharedInformerFactory(quotaClient, defaultInformerResyncPeriod),
 		RouteInformers:                     routeinformer.NewSharedInformerFactory(routerClient, defaultInformerResyncPeriod),
 		TemplateInformers:                  templateinformer.NewSharedInformerFactory(templateClient, defaultInformerResyncPeriod),
-		Stop:                               stopCh,
+		Stop:                               ctx.Done(),
+		Context:                            ctx,
 		InformersStarted:                   make(chan struct{}),
 		RestMapper:                         dynamicRestMapper,
 	}
@@ -183,7 +181,8 @@ type ControllerContext struct {
 	RestMapper              meta.RESTMapper
 
 	// Stop is the stop channel
-	Stop <-chan struct{}
+	Stop    <-chan struct{}
+	Context context.Context
 
 	informersStartedLock   sync.Mutex
 	informersStartedClosed bool
