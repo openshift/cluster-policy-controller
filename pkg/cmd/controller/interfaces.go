@@ -37,10 +37,17 @@ import (
 	securityclient "github.com/openshift/client-go/securityinternal/clientset/versioned"
 	templateclient "github.com/openshift/client-go/template/clientset/versioned"
 	templateinformer "github.com/openshift/client-go/template/informers/externalversions"
+	"github.com/openshift/library-go/pkg/controller/controllercmd"
+
 	"github.com/openshift/cluster-policy-controller/pkg/client/genericinformers"
 )
 
-func NewControllerContext(config openshiftcontrolplanev1.OpenShiftControllerManagerConfig, inClientConfig *rest.Config, ctx context.Context) (*ControllerContext, error) {
+func NewControllerContext(
+	ctx context.Context,
+	controllerContext *controllercmd.ControllerContext,
+	config openshiftcontrolplanev1.OpenShiftControllerManagerConfig,
+) (*EnhancedControllerContext, error) {
+	inClientConfig := controllerContext.KubeConfig
 
 	const defaultInformerResyncPeriod = 10 * time.Minute
 	kubeClient, err := kubernetes.NewForConfig(inClientConfig)
@@ -97,7 +104,8 @@ func NewControllerContext(config openshiftcontrolplanev1.OpenShiftControllerMana
 		return nil, err
 	}
 
-	openshiftControllerContext := &ControllerContext{
+	openshiftControllerContext := &EnhancedControllerContext{
+		ControllerContext:         controllerContext,
 		OpenshiftControllerConfig: config,
 
 		ClientBuilder: OpenshiftControllerClientBuilder{
@@ -114,8 +122,6 @@ func NewControllerContext(config openshiftcontrolplanev1.OpenShiftControllerMana
 		QuotaInformers:                     quotainformer.NewSharedInformerFactory(quotaClient, defaultInformerResyncPeriod),
 		RouteInformers:                     routeinformer.NewSharedInformerFactory(routerClient, defaultInformerResyncPeriod),
 		TemplateInformers:                  templateinformer.NewSharedInformerFactory(templateClient, defaultInformerResyncPeriod),
-		Stop:                               ctx.Done(),
-		Context:                            ctx,
 		InformersStarted:                   make(chan struct{}),
 		RestMapper:                         dynamicRestMapper,
 	}
@@ -124,7 +130,7 @@ func NewControllerContext(config openshiftcontrolplanev1.OpenShiftControllerMana
 	return openshiftControllerContext, nil
 }
 
-func (c *ControllerContext) ToGenericInformer() genericinformers.GenericResourceInformer {
+func (c *EnhancedControllerContext) ToGenericInformer() genericinformers.GenericResourceInformer {
 	return genericinformers.NewGenericInformers(
 		c.StartInformers,
 		c.KubernetesInformers,
@@ -152,7 +158,8 @@ func (c *ControllerContext) ToGenericInformer() genericinformers.GenericResource
 	)
 }
 
-type ControllerContext struct {
+type EnhancedControllerContext struct {
+	*controllercmd.ControllerContext
 	OpenshiftControllerConfig openshiftcontrolplanev1.OpenShiftControllerManagerConfig
 
 	// ClientBuilder will provide a client for this controller to use
@@ -175,10 +182,6 @@ type ControllerContext struct {
 	GenericResourceInformer genericinformers.GenericResourceInformer
 	RestMapper              meta.RESTMapper
 
-	// Stop is the stop channel
-	Stop    <-chan struct{}
-	Context context.Context
-
 	informersStartedLock   sync.Mutex
 	informersStartedClosed bool
 	// InformersStarted is closed after all of the controllers have been initialized and are running.  After this point it is safe,
@@ -186,7 +189,7 @@ type ControllerContext struct {
 	InformersStarted chan struct{}
 }
 
-func (c *ControllerContext) StartInformers(stopCh <-chan struct{}) {
+func (c *EnhancedControllerContext) StartInformers(stopCh <-chan struct{}) {
 	c.KubernetesInformers.Start(stopCh)
 	c.OpenshiftConfigKubernetesInformers.Start(stopCh)
 	c.ControllerManagerKubeInformers.Start(stopCh)
@@ -209,7 +212,7 @@ func (c *ControllerContext) StartInformers(stopCh <-chan struct{}) {
 	}
 }
 
-func (c *ControllerContext) IsControllerEnabled(name string) bool {
+func (c *EnhancedControllerContext) IsControllerEnabled(name string) bool {
 	return app.IsControllerEnabled(name, sets.String{}, c.OpenshiftControllerConfig.Controllers)
 }
 
@@ -245,7 +248,7 @@ type ControllerClientBuilder interface {
 // InitFunc is used to launch a particular controller.  It may run additional "should I activate checks".
 // Any error returned will cause the controller process to `Fatal`
 // The bool indicates whether the controller was enabled.
-type InitFunc func(ctx *ControllerContext) (bool, error)
+type InitFunc func(ctx context.Context, controllerCtx *EnhancedControllerContext) (bool, error)
 
 type OpenshiftControllerClientBuilder struct {
 	clientbuilder.ControllerClientBuilder

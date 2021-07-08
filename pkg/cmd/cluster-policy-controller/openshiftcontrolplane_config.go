@@ -3,16 +3,32 @@ package cluster_policy_controller
 import (
 	"time"
 
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
+
 	openshiftcontrolplanev1 "github.com/openshift/api/openshiftcontrolplane/v1"
 	"github.com/openshift/library-go/pkg/config/configdefaults"
-	"github.com/openshift/library-go/pkg/config/helpers"
-	leaderelectionconverter "github.com/openshift/library-go/pkg/config/leaderelection"
 )
 
+func asOpenshiftControllerManagerConfig(config *unstructured.Unstructured) (*openshiftcontrolplanev1.OpenShiftControllerManagerConfig, error) {
+	result := &openshiftcontrolplanev1.OpenShiftControllerManagerConfig{}
+	if config != nil {
+		// make a copy we can mutate
+		configCopy := config.DeepCopy()
+		// force the config to our version to read it
+		configCopy.SetGroupVersionKind(openshiftcontrolplanev1.GroupVersion.WithKind("OpenShiftControllerManagerConfig"))
+		if err := runtime.DefaultUnstructuredConverter.FromUnstructured(configCopy.Object, result); err != nil {
+			return nil, err
+		}
+	}
+
+	setRecommendedOpenShiftControllerConfigDefaults(result)
+
+	return result, nil
+}
+
 func setRecommendedOpenShiftControllerConfigDefaults(config *openshiftcontrolplanev1.OpenShiftControllerManagerConfig) {
-	configdefaults.SetRecommendedHTTPServingInfoDefaults(config.ServingInfo)
 	configdefaults.SetRecommendedKubeClientConfigDefaults(&config.KubeClientConfig)
-	config.LeaderElection = leaderelectionconverter.LeaderElectionDefaulting(config.LeaderElection, "openshift-kube-controller-manager", "cluster-policy-controller")
 
 	configdefaults.DefaultStringSlice(&config.Controllers, []string{"*"})
 
@@ -31,17 +47,4 @@ func setRecommendedOpenShiftControllerConfigDefaults(config *openshiftcontrolpla
 	if config.ResourceQuota.ConcurrentSyncs == 0 {
 		config.ResourceQuota.ConcurrentSyncs = 5
 	}
-}
-
-func getOpenShiftControllerConfigFileReferences(config *openshiftcontrolplanev1.OpenShiftControllerManagerConfig) []*string {
-	if config == nil {
-		return []*string{}
-	}
-
-	refs := []*string{}
-
-	refs = append(refs, helpers.GetHTTPServingInfoFileReferences(config.ServingInfo)...)
-	refs = append(refs, helpers.GetKubeClientConfigFileReferences(&config.KubeClientConfig)...)
-
-	return refs
 }
