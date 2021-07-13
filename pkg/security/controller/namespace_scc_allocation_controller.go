@@ -401,7 +401,7 @@ func (c *NamespaceSCCAllocationController) work() bool {
 		c.queue.Forget(key)
 	} else {
 		// if we had an error it means that we didn't handle it, which means that we want to requeue the work
-		utilruntime.HandleError(fmt.Errorf("error syncing namespace, it will be retried: %v", err))
+		utilruntime.HandleError(fmt.Errorf("error syncing %v namespace, it will be retried: %v", key, err))
 		c.queue.AddRateLimited(key)
 	}
 	return true
