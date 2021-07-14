@@ -12,7 +12,7 @@ const (
 	controllerName                    = "csr-approver-controller"
 	monitoringServiceAccountNamespace = "openshift-monitoring"
 	monitoringServiceAccountName      = "cluster-monitoring-operator"
-	monitoringCertificateSubject      = "/CN=system:serviceaccount:openshift-monitoring:prometheus-k8s"
+	monitoringCertificateSubject      = "CN=system:serviceaccount:openshift-monitoring:prometheus-k8s"
 	monitoringLabelKey                = "metrics.openshift.io/csr.subject"
 	monitoringLabelValue              = "prometheus"
 )
