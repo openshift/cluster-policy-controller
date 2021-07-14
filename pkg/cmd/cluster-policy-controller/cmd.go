@@ -26,6 +26,8 @@ type ClusterPolicyController struct {
 	ConfigFilePath string
 	// KubeConfigFile points to a kubeconfig file if you don't want to use the in cluster config
 	KubeConfigFile string
+	// TODO: remove - dummy variable to support config format update
+	Namespace string
 
 	Output io.Writer
 }
@@ -60,6 +62,8 @@ func NewClusterPolicyControllerCommand(name string, out, errout io.Writer, stopC
 	cmd.MarkFlagFilename("config", "yaml", "yml")
 	flags.StringVar(&options.KubeConfigFile, "kubeconfig", options.KubeConfigFile, "Location of the master configuration file to run from.")
 	cmd.MarkFlagFilename("kubeconfig", "kubeconfig")
+	// TODO: remove - dummy variable to support config format update
+	flags.StringVar(&options.Namespace, "namespace", options.Namespace, "To be removed")
 
 	return cmd
 }
