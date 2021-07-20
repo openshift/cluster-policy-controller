@@ -19,11 +19,12 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apimachinery/pkg/util/wait"
+	utilquota "k8s.io/apiserver/pkg/quota/v1"
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/tools/cache"
+	"k8s.io/controller-manager/pkg/informerfactory"
 	"k8s.io/kubernetes/pkg/controller"
 	"k8s.io/kubernetes/pkg/controller/resourcequota"
-	utilquota "k8s.io/kubernetes/pkg/quota/v1"
 
 	quotav1 "github.com/openshift/api/quota/v1"
 	quotatypedclient "github.com/openshift/client-go/quota/clientset/versioned/typed/quota/v1"
@@ -49,7 +50,7 @@ type ClusterQuotaReconcilationControllerOptions struct {
 	// InformersStarted knows if informers were started.
 	InformersStarted <-chan struct{}
 	// InformerFactory interfaces with informers.
-	InformerFactory controller.InformerFactory
+	InformerFactory informerfactory.InformerFactory
 	// Controls full resync of objects monitored for replenihsment.
 	ReplenishmentResyncPeriod controller.ResyncPeriodFunc
 }
@@ -100,7 +101,7 @@ func NewClusterQuotaReconcilationController(options ClusterQuotaReconcilationCon
 		UpdateFunc: c.updateClusterQuota,
 	})
 
-	qm := resourcequota.NewQuotaMonitor(
+	qm := resourcequota.NewMonitor(
 		options.InformersStarted,
 		options.InformerFactory,
 		options.IgnoredResourcesFunc(),

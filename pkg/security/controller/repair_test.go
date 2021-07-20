@@ -1,6 +1,9 @@
 package controller
 
 import (
+	"context"
+	"github.com/openshift/library-go/pkg/controller/factory"
+	"github.com/openshift/library-go/pkg/operator/events"
 	"math/big"
 	"testing"
 
@@ -32,7 +35,8 @@ func TestRepair(t *testing.T) {
 		rangeAllocationClient: securityclient.SecurityV1(),
 	}
 
-	err := c.Repair()
+	syncContext := factory.NewSyncContext(controllerName, events.NewInMemoryRecorder(controllerName))
+	err := c.Repair(context.TODO(), syncContext)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -74,7 +78,8 @@ func TestRepairIgnoresMismatch(t *testing.T) {
 		rangeAllocationClient: securityclient.SecurityV1(),
 	}
 
-	err := c.Repair()
+	syncContext := factory.NewSyncContext(controllerName, events.NewInMemoryRecorder(controllerName))
+	err := c.Repair(context.TODO(), syncContext)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -165,7 +170,8 @@ func TestRepairTable(t *testing.T) {
 				rangeAllocationClient: securityclient.SecurityV1(),
 			}
 
-			err := c.Repair()
+			syncContext := factory.NewSyncContext(controllerName, events.NewInMemoryRecorder(controllerName))
+			err := c.Repair(context.TODO(), syncContext)
 			if err != nil {
 				t.Fatal(err)
 			}
