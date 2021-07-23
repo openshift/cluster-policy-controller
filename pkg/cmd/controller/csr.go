@@ -3,12 +3,10 @@ package controller
 import (
 	"context"
 
-	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/selection"
 
 	"github.com/openshift/library-go/pkg/operator/csr"
-	"github.com/openshift/library-go/pkg/operator/events"
 )
 
 const (
@@ -26,8 +24,6 @@ func RunCSRApproverController(ctx context.Context, controllerCtx *EnhancedContro
 		return true, err
 	}
 
-	eventRecorder := events.NewRecorder(kubeClient.CoreV1().Events("test"), infraClusterCSRApproverControllerServiceAccountName, &v1.ObjectReference{})
-
 	selector := labels.NewSelector()
 	labelsRequirement, err := labels.NewRequirement(monitoringLabelKey, selection.Equals, []string{monitoringLabelValue})
 	if err != nil {
@@ -42,7 +38,7 @@ func RunCSRApproverController(ctx context.Context, controllerCtx *EnhancedContro
 		controllerCtx.KubernetesInformers.Certificates().V1().CertificateSigningRequests(),
 		csr.NewLabelFilter(selector),
 		csr.NewServiceAccountApprover(monitoringServiceAccountNamespace, monitoringServiceAccountName, monitoringCertificateSubject),
-		eventRecorder)
+		controllerCtx.EventRecorder)
 
 	go controller.Run(ctx, 1)
 
