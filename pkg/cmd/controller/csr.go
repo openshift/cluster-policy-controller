@@ -1,11 +1,14 @@
 package controller
 
 import (
-	"github.com/openshift/library-go/pkg/operator/csr"
-	"github.com/openshift/library-go/pkg/operator/events"
+	"context"
+
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/selection"
+
+	"github.com/openshift/library-go/pkg/operator/csr"
+	"github.com/openshift/library-go/pkg/operator/events"
 )
 
 const (
@@ -17,8 +20,8 @@ const (
 	monitoringLabelValue              = "prometheus"
 )
 
-func RunCSRApproverController(ctx *ControllerContext) (bool, error) {
-	kubeClient, err := ctx.ClientBuilder.Client(infraClusterCSRApproverControllerServiceAccountName)
+func RunCSRApproverController(ctx context.Context, controllerCtx *EnhancedControllerContext) (bool, error) {
+	kubeClient, err := controllerCtx.ClientBuilder.Client(infraClusterCSRApproverControllerServiceAccountName)
 	if err != nil {
 		return true, err
 	}
@@ -36,12 +39,12 @@ func RunCSRApproverController(ctx *ControllerContext) (bool, error) {
 		controllerName,
 		nil,
 		kubeClient.CertificatesV1().CertificateSigningRequests(),
-		ctx.KubernetesInformers.Certificates().V1().CertificateSigningRequests(),
+		controllerCtx.KubernetesInformers.Certificates().V1().CertificateSigningRequests(),
 		csr.NewLabelFilter(selector),
 		csr.NewServiceAccountApprover(monitoringServiceAccountNamespace, monitoringServiceAccountName, monitoringCertificateSubject),
 		eventRecorder)
 
-	go controller.Run(ctx.Context, 1)
+	go controller.Run(ctx, 1)
 
 	return true, nil
 }

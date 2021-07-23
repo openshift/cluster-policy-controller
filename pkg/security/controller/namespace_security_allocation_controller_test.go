@@ -1,8 +1,11 @@
 package controller
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/openshift/library-go/pkg/controller/factory"
+	"github.com/openshift/library-go/pkg/operator/events"
 	"math/big"
 	"strings"
 	"testing"
@@ -52,7 +55,9 @@ func TestController(t *testing.T) {
 		rangeAllocationClient: securityclient.SecurityV1(),
 		encoder:               encoder,
 	}
-	err := c.Repair()
+	syncContext := factory.NewSyncContext(controllerName, events.NewInMemoryRecorder(controllerName))
+	ctx := context.TODO()
+	err := c.Repair(ctx, syncContext)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -68,7 +73,7 @@ func TestController(t *testing.T) {
 	}
 	securityclient.ClearActions()
 
-	err = c.allocate(&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "test"}})
+	err = c.allocate(ctx, syncContext, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "test"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -168,13 +173,15 @@ func TestControllerError(t *testing.T) {
 				encoder:               encoder,
 			}
 
-			err := c.Repair()
+			ctx := context.TODO()
+			syncContext := factory.NewSyncContext(controllerName, events.NewInMemoryRecorder(controllerName))
+			err := c.Repair(ctx, syncContext)
 			if err != nil {
 				t.Fatal(err)
 			}
 			securityclient.ClearActions()
 
-			err = c.allocate(&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "test"}})
+			err = c.allocate(ctx, syncContext, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "test"}})
 			if !testCase.errFn(err) {
 				t.Fatal(err)
 			}

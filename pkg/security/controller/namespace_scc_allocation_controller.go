@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/openshift/library-go/pkg/operator/events"
 	"math/big"
 	"reflect"
 	"time"
@@ -23,8 +24,6 @@ import (
 	corev1client "k8s.io/client-go/kubernetes/typed/core/v1"
 	corev1listers "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/tools/cache"
-	"k8s.io/client-go/tools/record"
-	"k8s.io/client-go/util/workqueue"
 	"k8s.io/klog/v2"
 	coreapi "k8s.io/kubernetes/pkg/apis/core"
 
@@ -33,13 +32,19 @@ import (
 	securityv1client "github.com/openshift/client-go/securityinternal/clientset/versioned/typed/securityinternal/v1"
 	"github.com/openshift/cluster-policy-controller/pkg/security/mcs"
 	"github.com/openshift/cluster-policy-controller/pkg/security/uidallocator"
+	"github.com/openshift/library-go/pkg/controller/factory"
 	"github.com/openshift/library-go/pkg/security/uid"
 )
 
 const (
-	controllerName    = "namespace-security-allocation-controller"
-	rangeName         = "scc-uid"
-	periodicRepairKey = "__internal/periodicRepair"
+	controllerName   = "namespace-security-allocation-controller"
+	rangeName        = "scc-uid"
+	initialRepairKey = "__internal/initialRepair"
+
+	// For this controller to work correctly we need to ensure a periodic repair
+	// of all the range allocations. For that we are using a key "key"
+	// which will trigger that every 8 hours.
+	resyncPeriod = "@every 8h"
 )
 
 // NamespaceSCCAllocationController allocates uids/labels for namespaces
@@ -47,28 +52,15 @@ type NamespaceSCCAllocationController struct {
 	requiredUIDRange          *uid.Range
 	mcsAllocator              MCSAllocationFunc
 	nsLister                  corev1listers.NamespaceLister
-	nsListerSynced            cache.InformerSynced
 	currentUIDRangeAllocation *securityinternalv1.RangeAllocation
 
 	namespaceClient       corev1client.NamespaceInterface
 	rangeAllocationClient securityv1client.RangeAllocationsGetter
 
-	queue workqueue.RateLimitingInterface
-
 	encoder runtime.Encoder
-
-	eventRecorder record.EventRecorder
 }
 
-func NewNamespaceSCCAllocationController(
-	namespaceInformer corev1informers.NamespaceInformer,
-	client corev1client.NamespaceInterface,
-	rangeAllocationClient securityv1client.RangeAllocationsGetter,
-	requiredUIDRange *uid.Range,
-	mcs MCSAllocationFunc,
-	eventsBroadcaster record.EventBroadcaster,
-) *NamespaceSCCAllocationController {
-
+func NewNamespaceSCCAllocationController(namespaceInformer corev1informers.NamespaceInformer, client corev1client.NamespaceInterface, rangeAllocationClient securityv1client.RangeAllocationsGetter, requiredUIDRange *uid.Range, mcs MCSAllocationFunc, eventRecorder events.Recorder) factory.Controller {
 	scheme := runtime.NewScheme()
 	utilruntime.Must(corev1.AddToScheme(scheme))
 	codecs := serializer.NewCodecFactory(scheme)
@@ -81,53 +73,65 @@ func NewNamespaceSCCAllocationController(
 		namespaceClient:       client,
 		rangeAllocationClient: rangeAllocationClient,
 		nsLister:              namespaceInformer.Lister(),
-		nsListerSynced:        namespaceInformer.Informer().HasSynced,
-		queue:                 workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), controllerName),
 		encoder:               encoder,
-		eventRecorder:         eventsBroadcaster.NewRecorder(scheme, corev1.EventSource{Component: controllerName}),
+	}
+
+	eventRecorderWithSuffix := eventRecorder.WithComponentSuffix(controllerName)
+	syncContext := factory.NewSyncContext(controllerName, eventRecorder)
+	syncContext.Queue().Add(initialRepairKey)
+
+	enqueueNamespace := func(obj interface{}) {
+		ns, ok := obj.(*corev1.Namespace)
+		if !ok {
+			return
+		}
+		syncContext.Queue().Add(asNamespaceNameKey(ns.Name))
 	}
 
 	namespaceInformer.Informer().AddEventHandlerWithResyncPeriod(
 		cache.ResourceEventHandlerFuncs{
-			AddFunc: c.enqueueNamespace,
+			AddFunc: enqueueNamespace,
 			UpdateFunc: func(oldObj, newObj interface{}) {
-				c.enqueueNamespace(newObj)
+				enqueueNamespace(newObj)
 			},
 		},
 		10*time.Minute,
 	)
-	return c
+
+	return factory.New().ResyncSchedule(resyncPeriod).WithBareInformers(namespaceInformer.Informer()).WithSyncContext(syncContext).WithSync(c.sync).
+		ToController(controllerName, eventRecorderWithSuffix)
 }
 
-// Run starts the workers for this controller.
-func (c *NamespaceSCCAllocationController) Run(stopCh <-chan struct{}) {
-	defer utilruntime.HandleCrash()
-	defer c.queue.ShutDown()
+// sync handles initial and periodic repair and namespace creation/update
+func (c *NamespaceSCCAllocationController) sync(ctx context.Context, syncCtx factory.SyncContext) error {
+	key := syncCtx.QueueKey()
 
-	defer klog.V(1).Infof("Shutting down")
-
-	// Wait for the stores to fill
-	if !cache.WaitForCacheSync(stopCh, c.nsListerSynced) {
-		return
+	switch key {
+	case initialRepairKey:
+		klog.V(1).Infof("Repairing SCC UID Allocations")
+		if err := c.WaitForRepair(ctx, syncCtx); err != nil {
+			// this is consistent with previous behavior
+			klog.Fatal(err)
+		}
+		klog.V(1).Infof("Repair complete")
+	case factory.DefaultQueueKey: // periodic repair
+		if err := c.Repair(ctx, syncCtx); err != nil {
+			return fmt.Errorf("error during periodic repair: %v", err)
+		}
+	default:
+		namespaceName, err := parseNamespaceNameKey(key)
+		if err != nil {
+			return err
+		}
+		return c.syncNamespace(ctx, syncCtx, namespaceName)
 	}
-
-	klog.V(1).Infof("Repairing SCC UID Allocations")
-	if err := c.WaitForRepair(stopCh); err != nil {
-		// this is consistent with previous behavior
-		klog.Fatal(err)
-	}
-	klog.V(1).Infof("Repair complete")
-
-	c.AddNextPeriodicRepair()
-
-	go c.worker()
-	<-stopCh
+	return nil
 }
 
 // syncNamespace will sync the namespace with the given key.
 // This function is not meant to be invoked concurrently with the same key.
-func (c *NamespaceSCCAllocationController) syncNamespace(key string) error {
-	ns, err := c.nsLister.Get(key)
+func (c *NamespaceSCCAllocationController) syncNamespace(ctx context.Context, syncCtx factory.SyncContext, namespaceName string) error {
+	ns, err := c.nsLister.Get(namespaceName)
 	if apierrors.IsNotFound(err) {
 		return nil
 	}
@@ -138,10 +142,10 @@ func (c *NamespaceSCCAllocationController) syncNamespace(key string) error {
 		return nil
 	}
 
-	return c.allocate(ns)
+	return c.allocate(ctx, syncCtx, ns)
 }
 
-func (c *NamespaceSCCAllocationController) allocate(ns *corev1.Namespace) error {
+func (c *NamespaceSCCAllocationController) allocate(ctx context.Context, syncCtx factory.SyncContext, ns *corev1.Namespace) error {
 	// unless we affirmatively succeed, clear the local state to try again
 	success := false
 	defer func() {
@@ -224,11 +228,7 @@ func (c *NamespaceSCCAllocationController) allocate(ns *corev1.Namespace) error 
 	}
 	// emit event once per namespace.  There aren't many of these, but it will let us know how long it takes from namespace creation
 	// until the SCC ranges are created.  There is a suspicion that this takes a while.
-	c.eventRecorder.Eventf(&corev1.ObjectReference{
-		Kind:      "Namespace",
-		Namespace: ns.Name,
-		Name:      ns.Name,
-	}, corev1.EventTypeNormal, "CreatedSCCRanges", "created SCC ranges")
+	syncCtx.Recorder().Eventf("CreatedSCCRanges", "created SCC ranges for %v namespace", ns.Name)
 
 	success = true
 	return nil
@@ -244,23 +244,14 @@ func allocateNextContiguousBit(allocated *big.Int, max int) (int, bool) {
 	return 0, false
 }
 
-func (c *NamespaceSCCAllocationController) AddNextPeriodicRepair() {
-	// For this controller to work correctly we need to ensure a periodic repair
-	// of all the range allocations. For that we are adding an artificial key
-	// which will trigger that every 8 hours.
-	delta := time.Duration(8 * time.Hour)
-	c.queue.AddAfter(periodicRepairKey, delta)
-	klog.V(1).Infof("Adding next periodic repair on %s", time.Now().Add(delta))
-}
-
-func (c *NamespaceSCCAllocationController) WaitForRepair(stopCh <-chan struct{}) error {
+func (c *NamespaceSCCAllocationController) WaitForRepair(ctx context.Context, syncCtx factory.SyncContext) error {
 	return wait.PollImmediate(10*time.Second, 5*time.Minute, func() (bool, error) {
 		select {
-		case <-stopCh:
+		case <-ctx.Done():
 			return true, nil
 		default:
 		}
-		err := c.Repair()
+		err := c.Repair(ctx, syncCtx)
 		if err == nil {
 			return true, nil
 		}
@@ -269,7 +260,7 @@ func (c *NamespaceSCCAllocationController) WaitForRepair(stopCh <-chan struct{})
 	})
 }
 
-func (c *NamespaceSCCAllocationController) Repair() error {
+func (c *NamespaceSCCAllocationController) Repair(ctx context.Context, syncCtx factory.SyncContext) error {
 	// TODO: (per smarterclayton) if Get() or List() is a weak consistency read,
 	// or if they are executed against different leaders,
 	// the ordering guarantee required to ensure no item is allocated twice is violated.
@@ -311,7 +302,7 @@ func (c *NamespaceSCCAllocationController) Repair() error {
 			continue
 		case uidallocator.ErrFull:
 			msg := fmt.Sprintf("the UID range %s is full; you must widen the range in order to allocate more UIDs", c.requiredUIDRange)
-			c.eventRecorder.Event(uidRange, corev1.EventTypeWarning, "UIDRangeFull", msg)
+			syncCtx.Recorder().Warning("UIDRangeFull", msg)
 			return errors.New(msg)
 		default:
 			return fmt.Errorf("unable to allocate UID block %s for namespace %s due to an unknown error, exiting: %v", block, ns.Name, err)
@@ -357,52 +348,4 @@ func DefaultMCSAllocation(from *uid.Range, to *mcs.Range, blockSize int) MCSAllo
 		label, _ := to.LabelAt(uint64(offset))
 		return label
 	}
-}
-
-func (c *NamespaceSCCAllocationController) enqueueNamespace(obj interface{}) {
-	ns, ok := obj.(*corev1.Namespace)
-	if !ok {
-		return
-	}
-	c.queue.Add(ns.Name)
-}
-
-// worker runs a worker thread that just dequeues items, processes them, and marks them done.
-// It enforces that the syncHandler is never invoked concurrently with the same key.
-func (c *NamespaceSCCAllocationController) worker() {
-	for c.work() {
-	}
-}
-
-// work returns true if the worker thread should continue
-func (c *NamespaceSCCAllocationController) work() bool {
-	key, quit := c.queue.Get()
-	if quit {
-		return false
-	}
-	defer func() {
-		if key != periodicRepairKey {
-			c.queue.Done(key)
-		}
-	}()
-
-	if key == periodicRepairKey {
-		if err := c.Repair(); err != nil {
-			utilruntime.HandleError(fmt.Errorf("error during periodic repair: %v", err))
-		}
-		c.queue.Done(key)
-		c.AddNextPeriodicRepair()
-		return true
-	}
-
-	if err := c.syncNamespace(key.(string)); err == nil {
-		// this means the request was successfully handled.  We should "forget" the item so that any retry
-		// later on is reset
-		c.queue.Forget(key)
-	} else {
-		// if we had an error it means that we didn't handle it, which means that we want to requeue the work
-		utilruntime.HandleError(fmt.Errorf("error syncing %v namespace, it will be retried: %v", key, err))
-		c.queue.AddRateLimited(key)
-	}
-	return true
 }

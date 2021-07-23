@@ -5,18 +5,14 @@ import (
 	"fmt"
 	"math/rand"
 	"os"
-	"runtime"
 	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
-	genericapiserver "k8s.io/apiserver/pkg/server"
 	utilflag "k8s.io/component-base/cli/flag"
 	"k8s.io/component-base/logs"
 	"k8s.io/kubernetes/pkg/api/legacyscheme"
-
-	"github.com/openshift/library-go/pkg/serviceability"
 
 	"github.com/openshift/api/apps"
 	"github.com/openshift/api/authorization"
@@ -29,7 +25,6 @@ import (
 	"github.com/openshift/api/user"
 
 	cluster_policy_controller "github.com/openshift/cluster-policy-controller/pkg/cmd/cluster-policy-controller"
-	"github.com/openshift/cluster-policy-controller/pkg/version"
 )
 
 func init() {
@@ -47,8 +42,6 @@ func init() {
 }
 
 func main() {
-	stopCh := genericapiserver.SetupSignalHandler()
-
 	rand.Seed(time.Now().UTC().UnixNano())
 
 	pflag.CommandLine.SetNormalizeFunc(utilflag.WordSepNormalizeFunc)
@@ -56,21 +49,15 @@ func main() {
 
 	logs.InitLogs()
 	defer logs.FlushLogs()
-	defer serviceability.BehaviorOnPanic(os.Getenv("OPENSHIFT_ON_PANIC"), version.Get())()
-	defer serviceability.Profile(os.Getenv("OPENSHIFT_PROFILE")).Stop()
 
-	if len(os.Getenv("GOMAXPROCS")) == 0 {
-		runtime.GOMAXPROCS(runtime.NumCPU())
-	}
-
-	command := NewClusterPolicyControllerCommand(stopCh)
+	command := NewClusterPolicyControllerCommand()
 	if err := command.Execute(); err != nil {
 		fmt.Fprintf(os.Stderr, "%v\n", err)
 		os.Exit(1)
 	}
 }
 
-func NewClusterPolicyControllerCommand(stopCh <-chan struct{}) *cobra.Command {
+func NewClusterPolicyControllerCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "cluster-policy-controller",
 		Short: "Command for the OpenShift Cluster Policy Controller",
@@ -79,7 +66,7 @@ func NewClusterPolicyControllerCommand(stopCh <-chan struct{}) *cobra.Command {
 			os.Exit(1)
 		},
 	}
-	start := cluster_policy_controller.NewClusterPolicyControllerCommand("start", os.Stdout, os.Stderr, stopCh)
+	start := cluster_policy_controller.NewClusterPolicyControllerCommand("start")
 	cmd.AddCommand(start)
 
 	return cmd
