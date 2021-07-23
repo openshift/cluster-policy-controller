@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/openshift/library-go/pkg/operator/events"
 	"math/big"
 	"reflect"
 	"time"
@@ -31,8 +30,10 @@ import (
 	securityinternalv1 "github.com/openshift/api/securityinternal/v1"
 	securityv1client "github.com/openshift/client-go/securityinternal/clientset/versioned/typed/securityinternal/v1"
 	"github.com/openshift/cluster-policy-controller/pkg/security/mcs"
+	sccmetrics "github.com/openshift/cluster-policy-controller/pkg/security/metrics"
 	"github.com/openshift/cluster-policy-controller/pkg/security/uidallocator"
 	"github.com/openshift/library-go/pkg/controller/factory"
+	"github.com/openshift/library-go/pkg/operator/events"
 	"github.com/openshift/library-go/pkg/security/uid"
 )
 
@@ -57,6 +58,7 @@ type NamespaceSCCAllocationController struct {
 	namespaceClient       corev1client.NamespaceInterface
 	rangeAllocationClient securityv1client.RangeAllocationsGetter
 
+	metrics sccmetrics.NamespaceSCCAllocationMetrics
 	encoder runtime.Encoder
 }
 
@@ -67,12 +69,15 @@ func NewNamespaceSCCAllocationController(namespaceInformer corev1informers.Names
 	jsonSerializer := runtimejson.NewSerializer(runtimejson.DefaultMetaFactory, scheme, scheme, false)
 	encoder := codecs.WithoutConversion().EncoderForVersion(jsonSerializer, corev1.SchemeGroupVersion)
 
+	metrics := sccmetrics.NewNamespaceSCCAllocMetrics()
+
 	c := &NamespaceSCCAllocationController{
 		requiredUIDRange:      requiredUIDRange,
 		mcsAllocator:          mcs,
 		namespaceClient:       client,
 		rangeAllocationClient: rangeAllocationClient,
 		nsLister:              namespaceInformer.Lister(),
+		metrics:               metrics,
 		encoder:               encoder,
 	}
 
@@ -98,7 +103,14 @@ func NewNamespaceSCCAllocationController(namespaceInformer corev1informers.Names
 		10*time.Minute,
 	)
 
-	return factory.New().ResyncSchedule(resyncPeriod).WithBareInformers(namespaceInformer.Informer()).WithSyncContext(syncContext).WithSync(c.sync).
+	sccmetrics.Register()
+	klog.V(4).Info("namespace scc allocation metrics registered with prometheus")
+
+	return factory.New().
+		ResyncSchedule(resyncPeriod).
+		WithBareInformers(namespaceInformer.Informer()).
+		WithSyncContext(syncContext).
+		WithSync(c.sync).
 		ToController(controllerName, eventRecorderWithSuffix)
 }
 
@@ -188,6 +200,7 @@ func (c *NamespaceSCCAllocationController) allocate(ctx context.Context, syncCtx
 		return err
 	}
 	c.currentUIDRangeAllocation = actualRangeAllocation
+	c.metrics.UIDRangeUpdated(actualRangeAllocation)
 
 	block, ok := uidRange.BlockAt(uint32(bitIndex))
 	if !ok {
@@ -226,6 +239,7 @@ func (c *NamespaceSCCAllocationController) allocate(ctx context.Context, syncCtx
 	if err != nil {
 		return err
 	}
+	c.metrics.AddNamespacesProcessed(1)
 	// emit event once per namespace.  There aren't many of these, but it will let us know how long it takes from namespace creation
 	// until the SCC ranges are created.  There is a suspicion that this takes a while.
 	syncCtx.Recorder().Eventf("CreatedSCCRanges", "created SCC ranges for %v namespace", ns.Name)
@@ -286,11 +300,14 @@ func (c *NamespaceSCCAllocationController) Repair(ctx context.Context, syncCtx f
 	if err != nil {
 		return err
 	}
+
+	namespacesProcessed := 0
 	for _, ns := range nsList {
 		value, ok := ns.Annotations[securityv1.UIDRangeAnnotation]
 		if !ok {
 			continue
 		}
+		namespacesProcessed++
 		block, err := uid.ParseBlock(value)
 		if err != nil {
 			continue
@@ -308,6 +325,7 @@ func (c *NamespaceSCCAllocationController) Repair(ctx context.Context, syncCtx f
 			return fmt.Errorf("unable to allocate UID block %s for namespace %s due to an unknown error, exiting: %v", block, ns.Name, err)
 		}
 	}
+	c.metrics.SetNamespacesProcessed(namespacesProcessed)
 
 	newRangeAllocation := &coreapi.RangeAllocation{}
 	if err := uids.Snapshot(newRangeAllocation); err != nil {
@@ -320,12 +338,12 @@ func (c *NamespaceSCCAllocationController) Repair(ctx context.Context, syncCtx f
 		if _, err := c.rangeAllocationClient.RangeAllocations().Create(context.TODO(), uidRange, metav1.CreateOptions{}); err != nil {
 			return err
 		}
-		return nil
+	} else {
+		if _, err := c.rangeAllocationClient.RangeAllocations().Update(context.TODO(), uidRange, metav1.UpdateOptions{}); err != nil {
+			return err
+		}
 	}
-
-	if _, err := c.rangeAllocationClient.RangeAllocations().Update(context.TODO(), uidRange, metav1.UpdateOptions{}); err != nil {
-		return err
-	}
+	c.metrics.UIDRangeUpdated(uidRange)
 
 	return nil
 }
