@@ -33,6 +33,7 @@ func TestRepair(t *testing.T) {
 		requiredUIDRange:      uidr,
 		nsLister:              corev1listers.NewNamespaceLister(indexer),
 		rangeAllocationClient: securityclient.SecurityV1(),
+		metrics:               newFakeNamespaceSCCAllocMetrics(),
 	}
 
 	syncContext := factory.NewSyncContext(controllerName, events.NewInMemoryRecorder(controllerName))
@@ -76,6 +77,7 @@ func TestRepairIgnoresMismatch(t *testing.T) {
 		requiredUIDRange:      uidr,
 		nsLister:              corev1listers.NewNamespaceLister(indexer),
 		rangeAllocationClient: securityclient.SecurityV1(),
+		metrics:               newFakeNamespaceSCCAllocMetrics(),
 	}
 
 	syncContext := factory.NewSyncContext(controllerName, events.NewInMemoryRecorder(controllerName))
@@ -168,6 +170,7 @@ func TestRepairTable(t *testing.T) {
 				requiredUIDRange:      uidr,
 				nsLister:              corev1listers.NewNamespaceLister(indexer),
 				rangeAllocationClient: securityclient.SecurityV1(),
+				metrics:               newFakeNamespaceSCCAllocMetrics(),
 			}
 
 			syncContext := factory.NewSyncContext(controllerName, events.NewInMemoryRecorder(controllerName))

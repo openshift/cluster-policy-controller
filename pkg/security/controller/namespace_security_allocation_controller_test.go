@@ -46,6 +46,7 @@ func TestController(t *testing.T) {
 	scheme, codecs := apitesting.SchemeForOrDie(corev1.AddToScheme)
 	jsonSerializer := runtimejson.NewSerializer(runtimejson.DefaultMetaFactory, scheme, scheme, false)
 	encoder := codecs.WithoutConversion().EncoderForVersion(jsonSerializer, corev1.SchemeGroupVersion)
+	metrics := newFakeNamespaceSCCAllocMetrics()
 
 	c := &NamespaceSCCAllocationController{
 		requiredUIDRange:      uidr,
@@ -53,6 +54,7 @@ func TestController(t *testing.T) {
 		namespaceClient:       kubeclient.CoreV1().Namespaces(),
 		nsLister:              corev1listers.NewNamespaceLister(indexer),
 		rangeAllocationClient: securityclient.SecurityV1(),
+		metrics:               metrics,
 		encoder:               encoder,
 	}
 	syncContext := factory.NewSyncContext(controllerName, events.NewInMemoryRecorder(controllerName))
@@ -71,6 +73,16 @@ func TestController(t *testing.T) {
 	if action, ok := rangeAllocationActions[1].(clientgotesting.CreateAction); !ok {
 		t.Fatal(spew.Sdump(action))
 	}
+	if len(metrics.uidRanges) != 1 || metrics.getLatestUidRange().Range != "10-20/2" {
+		t.Fatalf("expected uidRange metric with range 10-20/2, got\n%v", spew.Sdump(metrics.uidRanges))
+	}
+	if metrics.getLatestAllocatedUid() != 0 {
+		t.Fatalf("expected 0 allocated uid in metrics, got\n%v", spew.Sdump(metrics.getLatestUidRange()))
+	}
+	if len(metrics.namespacesProcessed) != 1 || metrics.getLatestNamespaceProcessed() != 0 {
+		t.Fatalf("expected 0 namespaces processed metric, got\n%v", spew.Sdump(metrics.namespacesProcessed))
+	}
+
 	securityclient.ClearActions()
 
 	err = c.allocate(ctx, syncContext, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "test"}})
@@ -110,6 +122,16 @@ func TestController(t *testing.T) {
 	actualAllocatedInt := big.NewInt(0).SetBytes(actualRange.Data)
 	if actualAllocatedInt.Uint64() != 1 {
 		t.Errorf("did not allocate uid: %d", actualAllocatedInt.Uint64())
+	}
+	if len(metrics.uidRanges) != 2 || metrics.getLatestUidRange().Range != "10-20/2" {
+		t.Fatalf("expected uidRange metric with range 10-20/2, got\n%v", spew.Sdump(metrics.uidRanges))
+	}
+	if metrics.getLatestAllocatedUid() != 1 {
+		t.Fatalf("expected 1 allocated uid in metrics, got\n%v", spew.Sdump(metrics.getLatestUidRange()))
+	}
+	// namespace IsNotFound
+	if len(metrics.namespacesProcessed) != 1 || metrics.getLatestNamespaceProcessed() != 0 {
+		t.Fatalf("expected 0 namespaces processed metric, got\n%v", spew.Sdump(metrics.namespacesProcessed))
 	}
 }
 
@@ -163,6 +185,7 @@ func TestControllerError(t *testing.T) {
 			scheme, codecs := apitesting.SchemeForOrDie(corev1.AddToScheme)
 			jsonSerializer := runtimejson.NewSerializer(runtimejson.DefaultMetaFactory, scheme, scheme, false)
 			encoder := codecs.WithoutConversion().EncoderForVersion(jsonSerializer, corev1.SchemeGroupVersion)
+			metrics := newFakeNamespaceSCCAllocMetrics()
 
 			c := &NamespaceSCCAllocationController{
 				requiredUIDRange:      uidr,
@@ -170,6 +193,7 @@ func TestControllerError(t *testing.T) {
 				namespaceClient:       kubeclient.CoreV1().Namespaces(),
 				nsLister:              corev1listers.NewNamespaceLister(indexer),
 				rangeAllocationClient: securityclient.SecurityV1(),
+				metrics:               metrics,
 				encoder:               encoder,
 			}
 
@@ -178,6 +202,12 @@ func TestControllerError(t *testing.T) {
 			err := c.Repair(ctx, syncContext)
 			if err != nil {
 				t.Fatal(err)
+			}
+			if len(metrics.uidRanges) != 1 || metrics.getLatestAllocatedUid() != 0 {
+				t.Fatalf("expected 0 allocated uid in metrics, got\n%v", spew.Sdump(metrics.uidRanges))
+			}
+			if len(metrics.namespacesProcessed) != 1 || metrics.getLatestNamespaceProcessed() != 0 {
+				t.Fatalf("expected 0 namespaces processed metric, got\n%v", spew.Sdump(metrics.namespacesProcessed))
 			}
 			securityclient.ClearActions()
 
@@ -196,6 +226,12 @@ func TestControllerError(t *testing.T) {
 			}
 			if err != nil && c.currentUIDRangeAllocation != nil {
 				t.Fatal("state wasn't cleared!")
+			}
+			if len(metrics.uidRanges) != 2 || metrics.getLatestAllocatedUid() != 1 {
+				t.Fatalf("expected 1 allocated uid in metrics, got\n%v", spew.Sdump(metrics.uidRanges))
+			}
+			if len(metrics.namespacesProcessed) != 1 || metrics.getLatestNamespaceProcessed() != 0 {
+				t.Fatalf("expected 0 namespaces processed metric, got\n%v", spew.Sdump(metrics.namespacesProcessed))
 			}
 		})
 	}
