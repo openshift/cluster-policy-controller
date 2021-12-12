@@ -49,7 +49,7 @@ func RunResourceQuotaManager(ctx context.Context, controllerCtx *EnhancedControl
 	if err != nil {
 		return true, err
 	}
-	go ctrl.Run(concurrentResourceQuotaSyncs, ctx.Done())
+	go ctrl.Run(ctx, concurrentResourceQuotaSyncs)
 	go ctrl.Sync(discoveryFunc, 30*time.Second, ctx.Done())
 
 	return true, nil
