@@ -48,7 +48,7 @@ func New(r *uid.Range, factory allocator.AllocatorFactory) (*Allocator, error) {
 // NewInMemory creates an in-memory Allocator
 func NewInMemory(r *uid.Range) (*Allocator, error) {
 	factory := func(max int, rangeSpec string) (allocator.Interface, error) {
-		return allocator.NewContiguousAllocationMap(max, rangeSpec), nil
+		return allocator.NewAllocationMap(max, rangeSpec), nil
 	}
 	return New(r, factory)
 }
