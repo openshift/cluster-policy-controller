@@ -250,6 +250,14 @@ github.com/openshift/client-go/route/informers/externalversions/internalinterfac
 github.com/openshift/client-go/route/informers/externalversions/route
 github.com/openshift/client-go/route/informers/externalversions/route/v1
 github.com/openshift/client-go/route/listers/route/v1
+github.com/openshift/client-go/security/clientset/versioned
+github.com/openshift/client-go/security/clientset/versioned/scheme
+github.com/openshift/client-go/security/clientset/versioned/typed/security/v1
+github.com/openshift/client-go/security/informers/externalversions
+github.com/openshift/client-go/security/informers/externalversions/internalinterfaces
+github.com/openshift/client-go/security/informers/externalversions/security
+github.com/openshift/client-go/security/informers/externalversions/security/v1
+github.com/openshift/client-go/security/listers/security/v1
 github.com/openshift/client-go/securityinternal/clientset/versioned
 github.com/openshift/client-go/securityinternal/clientset/versioned/fake
 github.com/openshift/client-go/securityinternal/clientset/versioned/scheme
@@ -294,6 +302,9 @@ github.com/pkg/errors
 # github.com/pkg/profile v1.3.0
 ## explicit
 github.com/pkg/profile
+# github.com/pmezard/go-difflib v1.0.0
+## explicit
+github.com/pmezard/go-difflib/difflib
 # github.com/prometheus/client_golang v1.12.1
 ## explicit; go 1.13
 github.com/prometheus/client_golang/prometheus
@@ -326,6 +337,10 @@ github.com/spf13/cobra
 # github.com/spf13/pflag v1.0.5
 ## explicit; go 1.12
 github.com/spf13/pflag
+# github.com/stretchr/testify v1.7.0
+## explicit; go 1.13
+github.com/stretchr/testify/assert
+github.com/stretchr/testify/require
 # go.etcd.io/etcd/api/v3 v3.5.1
 ## explicit; go 1.16
 go.etcd.io/etcd/api/v3/authpb
@@ -1125,6 +1140,7 @@ k8s.io/component-base/traces
 k8s.io/component-base/version
 # k8s.io/component-helpers v0.24.0 => k8s.io/component-helpers v0.24.0
 ## explicit; go 1.16
+k8s.io/component-helpers/auth/rbac/validation
 k8s.io/component-helpers/scheduling/corev1
 k8s.io/component-helpers/scheduling/corev1/nodeaffinity
 k8s.io/component-helpers/storage/volume
@@ -1172,6 +1188,8 @@ k8s.io/kubernetes/pkg/apis/core/v1
 k8s.io/kubernetes/pkg/apis/core/v1/helper
 k8s.io/kubernetes/pkg/apis/core/v1/helper/qos
 k8s.io/kubernetes/pkg/apis/core/validation
+k8s.io/kubernetes/pkg/apis/rbac
+k8s.io/kubernetes/pkg/apis/rbac/v1
 k8s.io/kubernetes/pkg/capabilities
 k8s.io/kubernetes/pkg/cluster/ports
 k8s.io/kubernetes/pkg/controller
@@ -1181,9 +1199,14 @@ k8s.io/kubernetes/pkg/fieldpath
 k8s.io/kubernetes/pkg/quota/v1/evaluator/core
 k8s.io/kubernetes/pkg/quota/v1/install
 k8s.io/kubernetes/pkg/registry/core/service/allocator
+k8s.io/kubernetes/pkg/registry/rbac/validation
 k8s.io/kubernetes/pkg/util/hash
 k8s.io/kubernetes/pkg/util/parsers
 k8s.io/kubernetes/pkg/util/taints
+k8s.io/kubernetes/plugin/pkg/auth/authorizer/rbac
+# k8s.io/pod-security-admission v0.0.0 => k8s.io/pod-security-admission v0.24.0
+## explicit; go 1.16
+k8s.io/pod-security-admission/api
 # k8s.io/utils v0.0.0-20220210201930-3a6ce19ff2f9
 ## explicit; go 1.12
 k8s.io/utils/buffer
