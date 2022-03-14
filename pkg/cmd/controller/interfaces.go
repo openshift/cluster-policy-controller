@@ -34,7 +34,9 @@ import (
 	quotainformer "github.com/openshift/client-go/quota/informers/externalversions"
 	routeclient "github.com/openshift/client-go/route/clientset/versioned"
 	routeinformer "github.com/openshift/client-go/route/informers/externalversions"
-	securityclient "github.com/openshift/client-go/securityinternal/clientset/versioned"
+	securityclient "github.com/openshift/client-go/security/clientset/versioned"
+	securityinformer "github.com/openshift/client-go/security/informers/externalversions"
+	securityinternalclient "github.com/openshift/client-go/securityinternal/clientset/versioned"
 	templateclient "github.com/openshift/client-go/template/clientset/versioned"
 	templateinformer "github.com/openshift/client-go/template/informers/externalversions"
 	"github.com/openshift/library-go/pkg/controller/controllercmd"
@@ -103,6 +105,10 @@ func NewControllerContext(
 	if err != nil {
 		return nil, err
 	}
+	securityClient, err := securityclient.NewForConfig(clientConfig)
+	if err != nil {
+		return nil, err
+	}
 
 	openshiftControllerContext := &EnhancedControllerContext{
 		ControllerContext:         controllerContext,
@@ -121,6 +127,7 @@ func NewControllerContext(
 		OperatorInformers:                  operatorinformer.NewSharedInformerFactory(operatorClient, defaultInformerResyncPeriod),
 		QuotaInformers:                     quotainformer.NewSharedInformerFactory(quotaClient, defaultInformerResyncPeriod),
 		RouteInformers:                     routeinformer.NewSharedInformerFactory(routerClient, defaultInformerResyncPeriod),
+		SecurityInformers:                  securityinformer.NewSharedInformerFactory(securityClient, defaultInformerResyncPeriod),
 		TemplateInformers:                  templateinformer.NewSharedInformerFactory(templateClient, defaultInformerResyncPeriod),
 		InformersStarted:                   make(chan struct{}),
 		RestMapper:                         dynamicRestMapper,
@@ -178,6 +185,7 @@ type EnhancedControllerContext struct {
 	ConfigInformers   configinformer.SharedInformerFactory
 	ImageInformers    imageinformer.SharedInformerFactory
 	OperatorInformers operatorinformer.SharedInformerFactory
+	SecurityInformers securityinformer.SharedInformerFactory
 
 	GenericResourceInformer genericinformers.GenericResourceInformer
 	RestMapper              meta.RESTMapper
@@ -198,6 +206,7 @@ func (c *EnhancedControllerContext) StartInformers(stopCh <-chan struct{}) {
 	c.BuildInformers.Start(stopCh)
 	c.ConfigInformers.Start(stopCh)
 	c.ImageInformers.Start(stopCh)
+	c.SecurityInformers.Start(stopCh)
 
 	c.TemplateInformers.Start(stopCh)
 	c.QuotaInformers.Start(stopCh)
@@ -228,8 +237,8 @@ type ControllerClientBuilder interface {
 	OpenshiftConfigClient(name string) (configclient.Interface, error)
 	OpenshiftConfigClientOrDie(name string) configclient.Interface
 
-	OpenshiftSecurityClient(name string) (securityclient.Interface, error)
-	OpenshiftSecurityClientOrDie(name string) securityclient.Interface
+	OpenshiftSecurityClient(name string) (securityinternalclient.Interface, error)
+	OpenshiftSecurityClientOrDie(name string) securityinternalclient.Interface
 
 	// OpenShift clients based on generated internal clientsets
 	OpenshiftTemplateClient(name string) (templateclient.Interface, error)
@@ -399,15 +408,15 @@ func (b OpenshiftControllerClientBuilder) OpenshiftQuotaClientOrDie(name string)
 	return client
 }
 
-func (b OpenshiftControllerClientBuilder) OpenshiftSecurityClient(name string) (securityclient.Interface, error) {
+func (b OpenshiftControllerClientBuilder) OpenshiftSecurityClient(name string) (securityinternalclient.Interface, error) {
 	clientConfig, err := b.Config(name)
 	if err != nil {
 		return nil, err
 	}
-	return securityclient.NewForConfig(nonProtobufConfig(clientConfig))
+	return securityinternalclient.NewForConfig(nonProtobufConfig(clientConfig))
 }
 
-func (b OpenshiftControllerClientBuilder) OpenshiftSecurityClientOrDie(name string) securityclient.Interface {
+func (b OpenshiftControllerClientBuilder) OpenshiftSecurityClientOrDie(name string) securityinternalclient.Interface {
 	client, err := b.OpenshiftSecurityClient(name)
 	if err != nil {
 		klog.Fatal(err)
