@@ -7,15 +7,11 @@ import (
 
 	"k8s.io/klog/v2"
 
-	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/sets"
-	"k8s.io/apimachinery/pkg/util/wait"
-	cacheddiscovery "k8s.io/client-go/discovery/cached"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
-	"k8s.io/client-go/restmapper"
 	"k8s.io/controller-manager/app"
 	"k8s.io/controller-manager/pkg/clientbuilder"
 
@@ -68,11 +64,6 @@ func NewControllerContext(
 		clientConfig.Burst = clientConfig.Burst/10 + 1
 	}
 
-	discoveryClient := cacheddiscovery.NewMemCacheClient(kubeClient.Discovery())
-	dynamicRestMapper := restmapper.NewDeferredDiscoveryRESTMapper(discoveryClient)
-	dynamicRestMapper.Reset()
-	go wait.Until(dynamicRestMapper.Reset, 30*time.Second, ctx.Done())
-
 	appsClient, err := appsclient.NewForConfig(clientConfig)
 	if err != nil {
 		return nil, err
@@ -117,20 +108,17 @@ func NewControllerContext(
 		ClientBuilder: OpenshiftControllerClientBuilder{
 			ControllerClientBuilder: clientbuilder.NewDynamicClientBuilder(rest.AnonymousClientConfig(clientConfig), kubeClient.CoreV1(), defaultOpenShiftInfraNamespace),
 		},
-		KubernetesInformers:                informers.NewSharedInformerFactory(kubeClient, defaultInformerResyncPeriod),
-		OpenshiftConfigKubernetesInformers: informers.NewSharedInformerFactoryWithOptions(kubeClient, defaultInformerResyncPeriod, informers.WithNamespace("openshift-config")),
-		ControllerManagerKubeInformers:     informers.NewSharedInformerFactoryWithOptions(kubeClient, defaultInformerResyncPeriod, informers.WithNamespace("openshift-controller-manager")),
-		AppsInformers:                      appsinformer.NewSharedInformerFactory(appsClient, defaultInformerResyncPeriod),
-		BuildInformers:                     buildinformer.NewSharedInformerFactory(buildClient, defaultInformerResyncPeriod),
-		ConfigInformers:                    configinformer.NewSharedInformerFactory(configClient, defaultInformerResyncPeriod),
-		ImageInformers:                     imageinformer.NewSharedInformerFactory(imageClient, defaultInformerResyncPeriod),
-		OperatorInformers:                  operatorinformer.NewSharedInformerFactory(operatorClient, defaultInformerResyncPeriod),
-		QuotaInformers:                     quotainformer.NewSharedInformerFactory(quotaClient, defaultInformerResyncPeriod),
-		RouteInformers:                     routeinformer.NewSharedInformerFactory(routerClient, defaultInformerResyncPeriod),
-		SecurityInformers:                  securityinformer.NewSharedInformerFactory(securityClient, defaultInformerResyncPeriod),
-		TemplateInformers:                  templateinformer.NewSharedInformerFactory(templateClient, defaultInformerResyncPeriod),
-		InformersStarted:                   make(chan struct{}),
-		RestMapper:                         dynamicRestMapper,
+		KubernetesInformers: informers.NewSharedInformerFactory(kubeClient, defaultInformerResyncPeriod),
+		AppsInformers:       appsinformer.NewSharedInformerFactory(appsClient, defaultInformerResyncPeriod),
+		BuildInformers:      buildinformer.NewSharedInformerFactory(buildClient, defaultInformerResyncPeriod),
+		ConfigInformers:     configinformer.NewSharedInformerFactory(configClient, defaultInformerResyncPeriod),
+		ImageInformers:      imageinformer.NewSharedInformerFactory(imageClient, defaultInformerResyncPeriod),
+		OperatorInformers:   operatorinformer.NewSharedInformerFactory(operatorClient, defaultInformerResyncPeriod),
+		QuotaInformers:      quotainformer.NewSharedInformerFactory(quotaClient, defaultInformerResyncPeriod),
+		RouteInformers:      routeinformer.NewSharedInformerFactory(routerClient, defaultInformerResyncPeriod),
+		SecurityInformers:   securityinformer.NewSharedInformerFactory(securityClient, defaultInformerResyncPeriod),
+		TemplateInformers:   templateinformer.NewSharedInformerFactory(templateClient, defaultInformerResyncPeriod),
+		InformersStarted:    make(chan struct{}),
 	}
 	openshiftControllerContext.GenericResourceInformer = openshiftControllerContext.ToGenericInformer()
 
@@ -172,9 +160,7 @@ type EnhancedControllerContext struct {
 	// ClientBuilder will provide a client for this controller to use
 	ClientBuilder ControllerClientBuilder
 
-	KubernetesInformers                informers.SharedInformerFactory
-	OpenshiftConfigKubernetesInformers informers.SharedInformerFactory
-	ControllerManagerKubeInformers     informers.SharedInformerFactory
+	KubernetesInformers informers.SharedInformerFactory
 
 	TemplateInformers templateinformer.SharedInformerFactory
 	QuotaInformers    quotainformer.SharedInformerFactory
@@ -188,7 +174,6 @@ type EnhancedControllerContext struct {
 	SecurityInformers securityinformer.SharedInformerFactory
 
 	GenericResourceInformer genericinformers.GenericResourceInformer
-	RestMapper              meta.RESTMapper
 
 	informersStartedLock   sync.Mutex
 	informersStartedClosed bool
@@ -199,8 +184,6 @@ type EnhancedControllerContext struct {
 
 func (c *EnhancedControllerContext) StartInformers(stopCh <-chan struct{}) {
 	c.KubernetesInformers.Start(stopCh)
-	c.OpenshiftConfigKubernetesInformers.Start(stopCh)
-	c.ControllerManagerKubeInformers.Start(stopCh)
 
 	c.AppsInformers.Start(stopCh)
 	c.BuildInformers.Start(stopCh)
