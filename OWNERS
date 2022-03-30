@@ -1,14 +1,15 @@
 reviewers:
-  - smarterclayton
+  - atiratree
   - mfojtik
   - soltysh
-  - sttts
   - deads2k
-  - sanchezl
   - stlaz
+  - sttts
 approvers:
+  - atiratree
   - mfojtik
   - soltysh
   - deads2k
+  - stlaz
   - sttts
 component: "kube-controller-manager"
