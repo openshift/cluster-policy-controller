@@ -212,6 +212,10 @@ func (c *PodSecurityAdmissionLabelSynchronizationController) sync(ctx context.Co
 		return fmt.Errorf(errFmt, qKey, err)
 	}
 
+	if !isNSControlled(ns) {
+		return nil
+	}
+
 	if ns.Status.Phase == corev1.NamespaceTerminating {
 		klog.Infof("skipping synchronizing namespace %q because it is terminating", ns.Name)
 		return nil
