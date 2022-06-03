@@ -14,32 +14,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package cached
+// +k8s:conversion-gen=k8s.io/kubernetes/pkg/apis/rbac
+// +k8s:conversion-gen-external-types=k8s.io/api/rbac/v1
+// +k8s:defaulter-gen=TypeMeta
+// +k8s:defaulter-gen-input=k8s.io/api/rbac/v1
+// +k8s:deepcopy-gen=package
 
-import (
-	"sync"
+// +groupName=rbac.authorization.k8s.io
 
-	openapi_v3 "github.com/google/gnostic/openapiv3"
-	"k8s.io/client-go/openapi"
-)
-
-type groupversion struct {
-	delegate openapi.GroupVersion
-	once     sync.Once
-	doc      *openapi_v3.Document
-	err      error
-}
-
-func newGroupVersion(delegate openapi.GroupVersion) *groupversion {
-	return &groupversion{
-		delegate: delegate,
-	}
-}
-
-func (g *groupversion) Schema() (*openapi_v3.Document, error) {
-	g.once.Do(func() {
-		g.doc, g.err = g.delegate.Schema()
-	})
-
-	return g.doc, g.err
-}
+package v1 // import "k8s.io/kubernetes/pkg/apis/rbac/v1"
