@@ -37,6 +37,8 @@ const (
 
 // systemNSSyncExemptions is the list of namespaces deployed by an OpenShift install
 // payload, as retrieved by listing the namespaces after a successful installation
+// IMPORTANT: The Namespace openshift-operators must be an exception to this rule
+// since it is used by OCP/OLM users to install their Operator bundle solutions.
 var systemNSSyncExemptions = sets.NewString(
 	// kube-specific system namespaces
 	"default",
@@ -100,7 +102,6 @@ var systemNSSyncExemptions = sets.NewString(
 	"openshift-oauth-apiserver",
 	"openshift-openstack-infra",
 	"openshift-operator-lifecycle-manager",
-	"openshift-operators",
 	"openshift-ovirt-infra",
 	"openshift-sdn",
 	"openshift-service-ca",
