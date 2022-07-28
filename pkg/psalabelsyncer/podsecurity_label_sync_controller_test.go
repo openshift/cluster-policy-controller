@@ -34,8 +34,6 @@ var (
 		{ObjectMeta: metav1.ObjectMeta{Name: "controlled-namespace-too", Annotations: map[string]string{securityv1.UIDRangeAnnotation: "1000/1050"}}},
 		{ObjectMeta: metav1.ObjectMeta{Name: "controlled-namespace-terminating", Annotations: map[string]string{securityv1.UIDRangeAnnotation: "1000/1052"}}, Status: corev1.NamespaceStatus{Phase: corev1.NamespaceTerminating}},
 		{ObjectMeta: metav1.ObjectMeta{Name: "controlled-namespace-without-uid-annotation"}},
-		{ObjectMeta: metav1.ObjectMeta{Name: "controlled-namespace-previous-enforce-labels", Annotations: map[string]string{securityv1.UIDRangeAnnotation: "1000/1052"}, Labels: map[string]string{psapi.EnforceLevelLabel: "bogus value", psapi.EnforceVersionLabel: "bogus version value"}}},
-		{ObjectMeta: metav1.ObjectMeta{Name: "controlled-namespace-previous-warn-labels", Annotations: map[string]string{securityv1.UIDRangeAnnotation: "1000/1052"}, Labels: map[string]string{psapi.WarnLevelLabel: "bogus value", psapi.WarnVersionLabel: "bogus version value"}}},
 		{ObjectMeta: metav1.ObjectMeta{Name: "non-controlled-namespace", Labels: map[string]string{"security.openshift.io/scc.podSecurityLabelSync": "false"}, Annotations: map[string]string{securityv1.UIDRangeAnnotation: "1000/1052"}}},
 	}
 )
@@ -290,11 +288,9 @@ func TestPodSecurityAdmissionLabelSynchronizationController_sync(t *testing.T) {
 
 	mockCache := &mockSAToSCCCache{
 		mockCache: map[string]sets.String{
-			"controlled-namespace/testspecificsa":                          sets.NewString("scc_restricted", "scc_baseline"),
-			"controlled-namespace/testspecificsa2":                         sets.NewString("scc_restricted", "scc_privileged"),
-			"controlled-namespace/testspecificsa3":                         sets.NewString("scc_restricted"),
-			"controlled-namespace-previous-enforce-labels/testspecificsa3": sets.NewString("scc_restricted"),
-			"controlled-namespace-previous-warn-labels/testspecificsa3":    sets.NewString("scc_restricted"),
+			"controlled-namespace/testspecificsa":  sets.NewString("scc_restricted", "scc_baseline"),
+			"controlled-namespace/testspecificsa2": sets.NewString("scc_restricted", "scc_privileged"),
+			"controlled-namespace/testspecificsa3": sets.NewString("scc_restricted"),
 		},
 	}
 
@@ -365,26 +361,6 @@ func TestPodSecurityAdmissionLabelSynchronizationController_sync(t *testing.T) {
 			expectNSUpdate:   true,
 			expectedPSaLevel: "restricted",
 		},
-		{
-			name:   "SA with restricted SCC assigned in am NS with previous enforce labels",
-			nsName: "controlled-namespace-previous-enforce-labels",
-			serviceAccounts: []*corev1.ServiceAccount{
-				{ObjectMeta: metav1.ObjectMeta{Name: "testspecificsa3", Namespace: "controlled-namespace-previous-enforce-labels"}},
-			},
-			wantErr:          false,
-			expectNSUpdate:   true,
-			expectedPSaLevel: "restricted",
-		},
-		{
-			name:   "SA with restricted SCC assigned in am NS with previous warn labels",
-			nsName: "controlled-namespace-previous-warn-labels",
-			serviceAccounts: []*corev1.ServiceAccount{
-				{ObjectMeta: metav1.ObjectMeta{Name: "testspecificsa3", Namespace: "controlled-namespace-previous-warn-labels"}},
-			},
-			wantErr:          false,
-			expectNSUpdate:   true,
-			expectedPSaLevel: "restricted",
-		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -447,9 +423,8 @@ func TestPodSecurityAdmissionLabelSynchronizationController_sync(t *testing.T) {
 			require.Equal(t, tt.expectNSUpdate, (nsModified != nil), "expected NS update to be %v, but it was %v", tt.expectNSUpdate, nsModified)
 
 			if nsModified != nil && len(tt.expectedPSaLevel) > 0 {
-				require.Equal(t, tt.expectedPSaLevel, nsModified.Labels[psapi.EnforceLevelLabel], "unexpected PSa enforcement level")
-				require.Equal(t, "", nsModified.Labels[psapi.WarnLevelLabel], "unexpected PSa warn level")
-				require.Equal(t, "", nsModified.Labels[psapi.AuditLevelLabel], "unexpected PSa audit level")
+				require.Equal(t, tt.expectedPSaLevel, nsModified.Labels[psapi.WarnLevelLabel], "unexpected PSa warn level")
+				require.Equal(t, tt.expectedPSaLevel, nsModified.Labels[psapi.AuditLevelLabel], "unexpected PSa audit level")
 			}
 		})
 	}
