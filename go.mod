@@ -114,16 +114,11 @@ require (
 )
 
 replace (
-	k8s.io/api => k8s.io/api v0.24.0
 	k8s.io/apiextensions-apiserver => k8s.io/apiextensions-apiserver v0.24.0
-	k8s.io/apimachinery => k8s.io/apimachinery v0.24.0
-	k8s.io/apiserver => k8s.io/apiserver v0.24.0
 	k8s.io/cli-runtime => k8s.io/cli-runtime v0.24.0
-	k8s.io/client-go => k8s.io/client-go v0.24.0
 	k8s.io/cloud-provider => k8s.io/cloud-provider v0.24.0
 	k8s.io/cluster-bootstrap => k8s.io/cluster-bootstrap v0.24.0
 	k8s.io/code-generator => k8s.io/code-generator v0.24.0
-	k8s.io/component-base => k8s.io/component-base v0.24.0
 	k8s.io/component-helpers => k8s.io/component-helpers v0.24.0
 	k8s.io/controller-manager => k8s.io/controller-manager v0.24.0
 	k8s.io/cri-api => k8s.io/cri-api v0.24.0
@@ -140,3 +135,13 @@ replace (
 	k8s.io/pod-security-admission => k8s.io/pod-security-admission v0.24.0
 	k8s.io/sample-apiserver => k8s.io/sample-apiserver v0.24.0
 )
+
+replace k8s.io/api => github.com/qjkee/kubernetes/staging/src/k8s.io/api v0.0.0-20220805164915-f97fa78cef58
+
+replace k8s.io/apimachinery => github.com/qjkee/kubernetes/staging/src/k8s.io/apimachinery v0.0.0-20220805164915-f97fa78cef58
+
+replace k8s.io/client-go => github.com/qjkee/kubernetes/staging/src/k8s.io/client-go v0.0.0-20220805164915-f97fa78cef58
+
+replace k8s.io/component-base => github.com/qjkee/kubernetes/staging/src/k8s.io/component-base v0.0.0-20220805164915-f97fa78cef58
+
+replace k8s.io/apiserver => github.com/qjkee/kubernetes/staging/src/k8s.io/apiserver v0.0.0-20220805164915-f97fa78cef58
