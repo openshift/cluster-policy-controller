@@ -364,23 +364,6 @@ func TestSCCRoleCache_SCCsFor(t *testing.T) {
 }
 
 func Test_saToSCCCache_getRoleFromRoleRef(t *testing.T) {
-	type fields struct {
-		roleLister                rbacv1listers.RoleLister
-		clusterRoleLister         rbacv1listers.ClusterRoleLister
-		roleBindingIndexer        cache.Indexer
-		clusterRoleBindingIndexer cache.Indexer
-		sccLister                 securityv1listers.SecurityContextConstraintsLister
-		rolesSynced               cache.InformerSynced
-		roleBindingsSynced        cache.InformerSynced
-		usefulRolesLock           sync.Mutex
-		usefulRoles               map[string][]string
-		externalQueueEnqueueFunc  func(interface{})
-	}
-	type args struct {
-		ns      string
-		roleRef rbacv1.RoleRef
-	}
-
 	roleRef := func(name string) rbacv1.RoleRef {
 		return rbacv1.RoleRef{
 			APIGroup: rbacv1.GroupName,
@@ -784,8 +767,6 @@ func Test_saToSCCCache_handleRoleModified(t *testing.T) {
 			switch o := obj.(type) {
 			case metav1.ObjectMetaAccessor:
 				itemAdded = o.GetObjectMeta().GetNamespace()
-			case RoleInterface:
-				itemAdded = o.Namespace()
 			default:
 				t.Errorf("what is this? %T", obj)
 			}
@@ -890,8 +871,6 @@ func Test_saToSCCCache_handleRoleRemoved(t *testing.T) {
 				switch o := obj.(type) {
 				case metav1.ObjectMetaAccessor:
 					itemAdded = o.GetObjectMeta().GetNamespace()
-				case RoleInterface:
-					itemAdded = o.Namespace()
 				default:
 					t.Errorf("what is this? %T", obj)
 				}
@@ -998,8 +977,6 @@ func Test_saToSCCCache_handleSCCDeleted(t *testing.T) {
 				switch o := obj.(type) {
 				case metav1.ObjectMetaAccessor:
 					itemAdded = o.GetObjectMeta().GetNamespace()
-				case RoleInterface:
-					itemAdded = o.Namespace()
 				default:
 					t.Errorf("what is this? %T", obj)
 				}

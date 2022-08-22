@@ -206,7 +206,7 @@ func TestPodSecurityAdmissionLabelSynchronizationController_saToSCCCAcheEnqueueF
 
 	for _, ns := range testNamespaces {
 		ns := ns
-		namespaces.Add(ns)
+		require.NoError(t, namespaces.Add(ns))
 	}
 	nsLister := corev1listers.NewNamespaceLister(namespaces)
 	labelSelector, err := controlledNamespacesLabelSelector()
@@ -270,11 +270,6 @@ func TestPodSecurityAdmissionLabelSynchronizationController_saToSCCCAcheEnqueueF
 }
 
 func TestPodSecurityAdmissionLabelSynchronizationController_sync(t *testing.T) {
-	type args struct {
-		ctx               context.Context
-		controllerContext factory.SyncContext
-	}
-
 	labelSelector, err := controlledNamespacesLabelSelector()
 	require.NoError(t, err)
 
@@ -366,7 +361,7 @@ func TestPodSecurityAdmissionLabelSynchronizationController_sync(t *testing.T) {
 			expectedPSaLevel: "restricted",
 		},
 		{
-			name:   "SA with restricted SCC assigned in am NS with previous enforce labels",
+			name:   "SA with restricted SCC assigned in an NS with previous enforce labels",
 			nsName: "controlled-namespace-previous-enforce-labels",
 			serviceAccounts: []*corev1.ServiceAccount{
 				{ObjectMeta: metav1.ObjectMeta{Name: "testspecificsa3", Namespace: "controlled-namespace-previous-enforce-labels"}},
@@ -376,7 +371,7 @@ func TestPodSecurityAdmissionLabelSynchronizationController_sync(t *testing.T) {
 			expectedPSaLevel: "restricted",
 		},
 		{
-			name:   "SA with restricted SCC assigned in am NS with previous warn labels",
+			name:   "SA with restricted SCC assigned in an NS with previous warn labels",
 			nsName: "controlled-namespace-previous-warn-labels",
 			serviceAccounts: []*corev1.ServiceAccount{
 				{ObjectMeta: metav1.ObjectMeta{Name: "testspecificsa3", Namespace: "controlled-namespace-previous-warn-labels"}},
