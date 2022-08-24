@@ -412,11 +412,7 @@ func isNSControlled(ns *corev1.Namespace) bool {
 		return ns.Labels[labelSyncControlLabel] == "true"
 	}
 
-	if ns.Labels[labelSyncControlLabel] != "false" {
-		return true
-	}
-
-	return false
+	return ns.Labels[labelSyncControlLabel] != "false"
 }
 
 // controlledNamespacesLabelSelector returns label selector to be used with the
