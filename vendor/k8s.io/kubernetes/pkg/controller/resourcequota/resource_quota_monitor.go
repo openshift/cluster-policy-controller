@@ -245,6 +245,7 @@ func (qm *QuotaMonitor) SyncMonitors(resources map[schema.GroupVersionResource]s
 		}
 	}
 
+	klog.Infof("quota synced monitors; added %d, kept %d, removed %d, current %v", added, kept, len(toRemove), len(current))
 	klog.V(4).Infof("quota synced monitors; added %d, kept %d, removed %d", added, kept, len(toRemove))
 	// NewAggregate returns nil if errs is 0-length
 	return utilerrors.NewAggregate(errs)

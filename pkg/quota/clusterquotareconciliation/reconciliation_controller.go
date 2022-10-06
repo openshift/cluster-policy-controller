@@ -158,27 +158,37 @@ func (c *ClusterQuotaReconcilationController) Run(workers int, stopCh <-chan str
 
 // Sync periodically resyncs the controller when new resources are observed from discovery.
 func (c *ClusterQuotaReconcilationController) Sync(discoveryFunc resourcequota.NamespacedResourcesFunc, period time.Duration, stopCh <-chan struct{}) {
+	klog.Infof("Running ClusterQuotaReconcilationController.Sync")
 	// Something has changed, so track the new state and perform a sync.
 	oldResources := make(map[schema.GroupVersionResource]struct{})
 	wait.Until(func() {
+		for k, v := range oldResources {
+			klog.Infof("oldResources[%v]=%v", k, v)
+		}
 		// Get the current resource list from discovery.
+		klog.Infof("Running ClusterQuotaReconcilationController.Sync:resourcequota.GetQuotableResources")
 		newResources, err := resourcequota.GetQuotableResources(discoveryFunc)
+		klog.Infof("Running ClusterQuotaReconcilationController.Sync:resourcequota.GetQuotableResources.err=%v", err)
 		if err != nil {
 			utilruntime.HandleError(err)
 
+			klog.Infof("Running ClusterQuotaReconcilationController.Sync: len(newResources)=%v", len(newResources))
 			if discovery.IsGroupDiscoveryFailedError(err) && len(newResources) > 0 {
 				// In partial discovery cases, don't remove any existing informers, just add new ones
 				for k, v := range oldResources {
+					klog.Infof("oldResources -> newResources[%v]=%v", k, v)
 					newResources[k] = v
 				}
 			} else {
 				// short circuit in non-discovery error cases or if discovery returned zero resources
+				klog.Infof("Running ClusterQuotaReconcilationController.Sync: short circuit in non-discovery error cases or if discovery returned zero resources")
 				return
 			}
 		}
 
 		// Decide whether discovery has reported a change.
 		if reflect.DeepEqual(oldResources, newResources) {
+			klog.Infof("no resource updates from discovery, skipping resource quota sync")
 			klog.V(4).Infof("no resource updates from discovery, skipping resource quota sync")
 			return
 		}
@@ -194,10 +204,12 @@ func (c *ClusterQuotaReconcilationController) Sync(discoveryFunc resourcequota.N
 
 		// Perform the monitor resync and wait for controllers to report cache sync.
 		if err := c.resyncMonitors(newResources); err != nil {
+			klog.Infof("failed to sync resource monitors: %v", err)
 			utilruntime.HandleError(fmt.Errorf("failed to sync resource monitors: %v", err))
 			return
 		}
 		if c.quotaMonitor != nil && !cache.WaitForCacheSync(stopCh, c.quotaMonitor.IsSynced) {
+			klog.Infof("timed out waiting for quota monitor sync")
 			utilruntime.HandleError(fmt.Errorf("timed out waiting for quota monitor sync"))
 		}
 	}, period, stopCh)
@@ -206,14 +218,17 @@ func (c *ClusterQuotaReconcilationController) Sync(discoveryFunc resourcequota.N
 // resyncMonitors starts or stops quota monitors as needed to ensure that all
 // (and only) those resources present in the map are monitored.
 func (c *ClusterQuotaReconcilationController) resyncMonitors(resources map[schema.GroupVersionResource]struct{}) error {
+	klog.Infof("Running ClusterQuotaReconcilationController.resyncMonitors")
 	// SyncMonitors can only fail if there was no Informer for the given gvr
 	err := c.quotaMonitor.SyncMonitors(resources)
 	// this is no-op for already running monitors
 	c.quotaMonitor.StartMonitors()
+	klog.Infof("Running ClusterQuotaReconcilationController.resyncMonitors: err=%v", err)
 	return err
 }
 
 func (c *ClusterQuotaReconcilationController) calculate(quotaName string, namespaceNames ...string) {
+	klog.Infof("Running ClusterQuotaReconcilationController.calculate")
 	if len(namespaceNames) == 0 {
 		return
 	}
@@ -222,10 +237,12 @@ func (c *ClusterQuotaReconcilationController) calculate(quotaName string, namesp
 		items = append(items, workItem{namespaceName: name, forceRecalculation: false})
 	}
 
+	klog.Infof("Running ClusterQuotaReconcilationController.calculate: quotaName=%v, items=%v", quotaName, items)
 	c.queue.AddWithData(quotaName, items...)
 }
 
 func (c *ClusterQuotaReconcilationController) forceCalculation(quotaName string, namespaceNames ...string) {
+	klog.Infof("Running ClusterQuotaReconcilationController.forceCalculation")
 	if len(namespaceNames) == 0 {
 		return
 	}
@@ -234,19 +251,23 @@ func (c *ClusterQuotaReconcilationController) forceCalculation(quotaName string,
 		items = append(items, workItem{namespaceName: name, forceRecalculation: true})
 	}
 
+	klog.Infof("Running ClusterQuotaReconcilationController.forceCalculation: quotaName=%v, items=%v", quotaName, items)
 	c.queue.AddWithData(quotaName, items...)
 }
 
 func (c *ClusterQuotaReconcilationController) calculateAll() {
+	klog.Infof("Running ClusterQuotaReconcilationController.calculateAll")
 	quotas, err := c.clusterQuotaLister.List(labels.Everything())
 	if err != nil {
 		utilruntime.HandleError(err)
 		return
 	}
 
+	klog.Infof("Listing %q quota objects", len(quotas))
 	for _, quota := range quotas {
 		// If we have namespaces we map to, force calculating those namespaces
 		namespaces, _ := c.clusterQuotaMapper.GetNamespacesFor(quota.Name)
+		klog.Infof("Namespaces for quota %q: %v", quota, namespaces)
 		if len(namespaces) > 0 {
 			c.forceCalculation(quota.Name, namespaces...)
 			continue
@@ -254,6 +275,7 @@ func (c *ClusterQuotaReconcilationController) calculateAll() {
 
 		// If the quota status has namespaces when our mapper doesn't think it should,
 		// add it directly to the queue without any work items
+		klog.Infof("Namespaces in status for quota %q: %v", quota, quota.Status.Namespaces)
 		if len(quota.Status.Namespaces) > 0 {
 			c.queue.AddWithData(quota.Name)
 			continue
@@ -265,7 +287,9 @@ func (c *ClusterQuotaReconcilationController) calculateAll() {
 // It enforces that the syncHandler is never invoked concurrently with the same key.
 func (c *ClusterQuotaReconcilationController) worker() {
 	workFunc := func() bool {
+		klog.Infof("ClusterQuotaReconcilationController.worker(): picking up with data item")
 		uncastKey, uncastData, quit := c.queue.GetWithData()
+		klog.Infof("ClusterQuotaReconcilationController.worker(): uncastKey=%v, uncastData=%v, quit=%v", uncastKey, uncastData, quit)
 		if quit {
 			return true
 		}
@@ -275,13 +299,16 @@ func (c *ClusterQuotaReconcilationController) worker() {
 		defer c.workerLock.RUnlock()
 
 		quotaName := uncastKey.(string)
+		klog.Infof("ClusterQuotaReconcilationController.worker(): quotaName=%v", quotaName)
 		quota, err := c.clusterQuotaLister.Get(quotaName)
+		klog.Infof("ClusterQuotaReconcilationController.worker(): quotaName=%v err=%v, quota=%v", quotaName, err, quota)
 		if apierrors.IsNotFound(err) {
 			c.queue.Forget(uncastKey)
 			return false
 		}
 		if err != nil {
 			utilruntime.HandleError(err)
+			klog.Infof("ClusterQuotaReconcilationController.worker(): AddWithDataRateLimited, uncastKey=%v, uncastData=%v", uncastKey, uncastData)
 			c.queue.AddWithDataRateLimited(uncastKey, uncastData...)
 			return false
 		}
@@ -290,7 +317,9 @@ func (c *ClusterQuotaReconcilationController) worker() {
 		for _, dataElement := range uncastData {
 			workItems = append(workItems, dataElement.(workItem))
 		}
+		klog.Infof("ClusterQuotaReconcilationController.worker(): workItems=%v", workItems)
 		err, retryItems := c.syncQuotaForNamespaces(quota, workItems)
+		klog.Infof("ClusterQuotaReconcilationController.worker().syncQuotaForNamespaces: workItems=%v, quota=%v, err=%v, retryItems=%v", workItems, quota, err, retryItems)
 		if err == nil {
 			c.queue.Forget(uncastKey)
 			return false
@@ -301,6 +330,7 @@ func (c *ClusterQuotaReconcilationController) worker() {
 		for _, item := range retryItems {
 			items = append(items, item)
 		}
+		klog.Infof("ClusterQuotaReconcilationController.worker().AddWithDataRateLimited: uncastKey=%v, items=%v", uncastKey, items)
 		c.queue.AddWithDataRateLimited(uncastKey, items...)
 		return false
 	}
@@ -315,24 +345,30 @@ func (c *ClusterQuotaReconcilationController) worker() {
 
 // syncResourceQuotaFromKey syncs a quota key
 func (c *ClusterQuotaReconcilationController) syncQuotaForNamespaces(originalQuota *quotav1.ClusterResourceQuota, workItems []workItem) (error, []workItem /* to retry */) {
+	klog.Infof("Running ClusterQuotaReconcilationController.syncQuotaForNamespaces")
 	quota := originalQuota.DeepCopy()
 
 	// get the list of namespaces that match this cluster quota
 	matchingNamespaceNamesList, quotaSelector := c.clusterQuotaMapper.GetNamespacesFor(quota.Name)
+	klog.Infof("Running ClusterQuotaReconcilationController.syncQuotaForNamespaces: matchingNamespaceNamesList=%v, quotaSelector=%v", matchingNamespaceNamesList, quotaSelector)
 	if !equality.Semantic.DeepEqual(quotaSelector, quota.Spec.Selector) {
+		klog.Infof("mapping not up to date, have=%v need=%v", quotaSelector, quota.Spec.Selector)
 		return fmt.Errorf("mapping not up to date, have=%v need=%v", quotaSelector, quota.Spec.Selector), workItems
 	}
 	matchingNamespaceNames := sets.NewString(matchingNamespaceNamesList...)
-
+	klog.Infof("Running ClusterQuotaReconcilationController.syncQuotaForNamespaces: matchingNamespaceNames=%v", matchingNamespaceNames)
 	reconcilationErrors := []error{}
 	retryItems := []workItem{}
 	for _, item := range workItems {
+		klog.Infof("Running ClusterQuotaReconcilationController.syncQuotaForNamespaces: item=%v", item)
 		namespaceName := item.namespaceName
 		namespaceTotals, namespaceLoaded := quotautil.GetResourceQuotasStatusByNamespace(quota.Status.Namespaces, namespaceName)
+		klog.Infof("Running ClusterQuotaReconcilationController.syncQuotaForNamespaces: namespaceTotals=%v, namespaceLoaded=%v", namespaceTotals, namespaceLoaded)
 		if !matchingNamespaceNames.Has(namespaceName) {
 			if namespaceLoaded {
 				// remove this item from all totals
 				quota.Status.Total.Used = utilquota.Subtract(quota.Status.Total.Used, namespaceTotals.Used)
+				klog.Infof("Running ClusterQuotaReconcilationController.syncQuotaForNamespaces: quota.Status.Total.Used=%v", quota.Status.Total.Used)
 				quotautil.RemoveResourceQuotasStatusByNamespace(&quota.Status.Namespaces, namespaceName)
 			}
 			continue
@@ -340,10 +376,12 @@ func (c *ClusterQuotaReconcilationController) syncQuotaForNamespaces(originalQuo
 
 		// if there's no work for us to do, do nothing
 		if !item.forceRecalculation && namespaceLoaded && equality.Semantic.DeepEqual(namespaceTotals.Hard, quota.Spec.Quota.Hard) {
+			klog.Infof("Running ClusterQuotaReconcilationController.syncQuotaForNamespaces: if there's no work for us to do, do nothing")
 			continue
 		}
 
 		actualUsage, err := quotaUsageCalculationFunc(namespaceName, quota.Spec.Quota.Scopes, quota.Spec.Quota.Hard, c.registry, quota.Spec.Quota.ScopeSelector)
+		klog.Infof("Running ClusterQuotaReconcilationController.syncQuotaForNamespaces: quotaUsageCalculationFunc, err=%v", err)
 		if err != nil {
 			// tally up errors, but calculate everything you can
 			reconcilationErrors = append(reconcilationErrors, err)
@@ -368,8 +406,10 @@ func (c *ClusterQuotaReconcilationController) syncQuotaForNamespaces(originalQuo
 	// Needed because we will never get workitems for namespaces that no longer exist if we missed the delete event (e.g. on startup)
 	// range on a copy so that we don't mutate our original
 	statusCopy := quota.Status.Namespaces.DeepCopy()
+	klog.Infof("Running ClusterQuotaReconcilationController.syncQuotaForNamespaces: statusCopy=%v", statusCopy)
 	for _, namespaceTotals := range statusCopy {
 		namespaceName := namespaceTotals.Namespace
+		klog.Infof("Running ClusterQuotaReconcilationController.syncQuotaForNamespaces: namespaceName=%v, matchingNamespaceNames=%v", namespaceName, matchingNamespaceNames)
 		if !matchingNamespaceNames.Has(namespaceName) {
 			quota.Status.Total.Used = utilquota.Subtract(quota.Status.Total.Used, namespaceTotals.Status.Used)
 			quotautil.RemoveResourceQuotasStatusByNamespace(&quota.Status.Namespaces, namespaceName)
@@ -380,10 +420,12 @@ func (c *ClusterQuotaReconcilationController) syncQuotaForNamespaces(originalQuo
 
 	// if there's no change, no update, return early.  NewAggregate returns nil on empty input
 	if equality.Semantic.DeepEqual(quota, originalQuota) {
+		klog.Infof("Running ClusterQuotaReconcilationController.syncQuotaForNamespaces: no change, no update, return early, quota=%v", quota)
 		return kutilerrors.NewAggregate(reconcilationErrors), retryItems
 	}
 
 	if _, err := c.clusterQuotaClient.UpdateStatus(context.TODO(), quota, metav1.UpdateOptions{}); err != nil {
+		klog.Infof("Running ClusterQuotaReconcilationController.syncQuotaForNamespaces: c.clusterQuotaClient.UpdateStatus, err=%v", err)
 		return kutilerrors.NewAggregate(append(reconcilationErrors, err)), workItems
 	}
 
@@ -392,24 +434,30 @@ func (c *ClusterQuotaReconcilationController) syncQuotaForNamespaces(originalQuo
 
 // replenishQuota is a replenishment function invoked by a controller to notify that a quota should be recalculated
 func (c *ClusterQuotaReconcilationController) replenishQuota(groupResource schema.GroupResource, namespace string) {
+	klog.Infof("Running ClusterQuotaReconcilationController.replenishQuota")
 	// check if the quota controller can evaluate this kind, if not, ignore it altogether...
 	releventEvaluators := []utilquota.Evaluator{}
 	evaluators := c.registry.List()
 	for i := range evaluators {
 		evaluator := evaluators[i]
+		klog.Infof("Running ClusterQuotaReconcilationController.replenishQuota: evaluator=%v", evaluator)
 		if evaluator.GroupResource() == groupResource {
 			releventEvaluators = append(releventEvaluators, evaluator)
 		}
 	}
+	klog.Infof("Running ClusterQuotaReconcilationController.replenishQuota: releventEvaluators=%v", releventEvaluators)
 	if len(releventEvaluators) == 0 {
 		return
 	}
 
 	quotaNames, _ := c.clusterQuotaMapper.GetClusterQuotasFor(namespace)
+	klog.Infof("Running ClusterQuotaReconcilationController.replenishQuota: GetClusterQuotasFor, quotaNames=%v", quotaNames)
 
 	// only queue those quotas that are tracking a resource associated with this kind.
 	for _, quotaName := range quotaNames {
+		klog.Infof("Running ClusterQuotaReconcilationController.replenishQuota: GetClusterQuotasFor, quotaName=%v", quotaName)
 		quota, err := c.clusterQuotaLister.Get(quotaName)
+		klog.Infof("Running ClusterQuotaReconcilationController.replenishQuota: GetClusterQuotasFor, c.clusterQuotaLister.Get, err=%v", err)
 		if err != nil {
 			// replenishment will be delayed, but we'll get back around to it later if it matters
 			continue
@@ -418,6 +466,7 @@ func (c *ClusterQuotaReconcilationController) replenishQuota(groupResource schem
 		resourceQuotaResources := utilquota.ResourceNames(quota.Status.Total.Hard)
 		for _, evaluator := range releventEvaluators {
 			matchedResources := evaluator.MatchingResources(resourceQuotaResources)
+			klog.Infof("Running ClusterQuotaReconcilationController.replenishQuota: evaluator.MatchingResources, evaluator=%v, matchedResources=%v", evaluator, matchedResources)
 			if len(matchedResources) > 0 {
 				// TODO: make this support targeted replenishment to a specific kind, right now it does a full recalc on that quota.
 				c.forceCalculation(quotaName, namespace)
