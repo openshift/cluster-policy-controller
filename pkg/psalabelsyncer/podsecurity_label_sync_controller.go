@@ -33,7 +33,7 @@ import (
 const (
 	controllerName        = "pod-security-admission-label-synchronization-controller"
 	labelSyncControlLabel = "security.openshift.io/scc.podSecurityLabelSync"
-	currentPSaVersion     = "v1.24"
+	currentPSaVersion     = "v1.25"
 )
 
 // PodSecurityAdmissionLabelSynchronizationController watches over namespaces labelled with
