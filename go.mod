@@ -21,7 +21,7 @@ require (
 	k8s.io/controller-manager v0.25.0
 	k8s.io/klog/v2 v2.70.1
 	k8s.io/kubernetes v1.25.0
-	k8s.io/pod-security-admission v0.0.0
+	k8s.io/pod-security-admission v0.25.0
 )
 
 require (

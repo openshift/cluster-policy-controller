@@ -1220,7 +1220,7 @@ k8s.io/kubernetes/pkg/util/hash
 k8s.io/kubernetes/pkg/util/parsers
 k8s.io/kubernetes/pkg/util/taints
 k8s.io/kubernetes/plugin/pkg/auth/authorizer/rbac
-# k8s.io/pod-security-admission v0.0.0 => k8s.io/pod-security-admission v0.25.0
+# k8s.io/pod-security-admission v0.25.0 => k8s.io/pod-security-admission v0.25.0
 ## explicit; go 1.19
 k8s.io/pod-security-admission/api
 # k8s.io/utils v0.0.0-20220728103510-ee6ede2d64ed
