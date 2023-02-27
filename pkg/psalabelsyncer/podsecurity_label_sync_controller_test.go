@@ -34,6 +34,8 @@ var (
 		{ObjectMeta: metav1.ObjectMeta{Name: "controlled-namespace-too", Annotations: map[string]string{securityv1.UIDRangeAnnotation: "1000/1050"}}},
 		{ObjectMeta: metav1.ObjectMeta{Name: "controlled-namespace-terminating", Annotations: map[string]string{securityv1.UIDRangeAnnotation: "1000/1052"}}, Status: corev1.NamespaceStatus{Phase: corev1.NamespaceTerminating}},
 		{ObjectMeta: metav1.ObjectMeta{Name: "controlled-namespace-without-uid-annotation"}},
+		{ObjectMeta: metav1.ObjectMeta{Name: "controlled-namespace-previous-enforce-labels", Annotations: map[string]string{securityv1.UIDRangeAnnotation: "1000/1052"}, Labels: map[string]string{psapi.EnforceLevelLabel: "bogus value", psapi.EnforceVersionLabel: "bogus version value"}}},
+		{ObjectMeta: metav1.ObjectMeta{Name: "controlled-namespace-previous-warn-labels", Annotations: map[string]string{securityv1.UIDRangeAnnotation: "1000/1052"}, Labels: map[string]string{psapi.WarnLevelLabel: "bogus value", psapi.WarnVersionLabel: "bogus version value"}}},
 		{ObjectMeta: metav1.ObjectMeta{Name: "non-controlled-namespace", Labels: map[string]string{"security.openshift.io/scc.podSecurityLabelSync": "false"}, Annotations: map[string]string{securityv1.UIDRangeAnnotation: "1000/1052"}}},
 	}
 )
@@ -263,6 +265,188 @@ func TestPodSecurityAdmissionLabelSynchronizationController_saToSCCCAcheEnqueueF
 
 			require.Equal(t, tt.expectedKeyNum, queue.Len())
 
+		})
+	}
+}
+func TestEnforcingPodSecurityAdmissionLabelSynchronizationController_sync(t *testing.T) {
+	labelSelector, err := controlledNamespacesLabelSelector()
+	require.NoError(t, err)
+
+	nsObjectSlice := []runtime.Object{}
+	nsIndexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{})
+	for _, ns := range testNamespaces {
+		require.NoError(t, nsIndexer.Add(ns))
+		nsObjectSlice = append(nsObjectSlice, ns)
+	}
+
+	nsClient := fake.NewSimpleClientset(nsObjectSlice...)
+	nsLister := corev1listers.NewNamespaceLister(nsIndexer)
+
+	mockCache := &mockSAToSCCCache{
+		mockCache: map[string]sets.String{
+			"controlled-namespace/testspecificsa":                          sets.NewString("scc_restricted", "scc_baseline"),
+			"controlled-namespace/testspecificsa2":                         sets.NewString("scc_restricted", "scc_privileged"),
+			"controlled-namespace/testspecificsa3":                         sets.NewString("scc_restricted"),
+			"controlled-namespace-previous-enforce-labels/testspecificsa3": sets.NewString("scc_restricted"),
+			"controlled-namespace-previous-warn-labels/testspecificsa3":    sets.NewString("scc_restricted"),
+		},
+	}
+
+	tests := []struct {
+		name             string
+		serviceAccounts  []*corev1.ServiceAccount
+		nsName           string
+		wantErr          bool
+		expectNSUpdate   bool
+		expectedPSaLevel string
+	}{
+		{
+			name:    "non-existent ns",
+			nsName:  "unknown",
+			wantErr: true,
+		},
+		{
+			name:   "terminating ns",
+			nsName: "controlled-namespace-terminating",
+		},
+		{
+			name:   "controlled NS w/o UID annotation",
+			nsName: "controlled-namespace-without-uid-annotation",
+		},
+		{
+			name:   "no SAs in the namespace",
+			nsName: "controlled-namespace",
+			serviceAccounts: []*corev1.ServiceAccount{
+				{ObjectMeta: metav1.ObjectMeta{Name: "default", Namespace: "other-ns"}},
+			},
+			wantErr: false,
+		},
+		{
+			name:   "SA without any assigned SCCs",
+			nsName: "controlled-namespace",
+			serviceAccounts: []*corev1.ServiceAccount{
+				{ObjectMeta: metav1.ObjectMeta{Name: "default", Namespace: "controlled-namespace"}},
+			},
+			wantErr: true,
+		},
+		{
+			name:   "SA with restricted and baseline SCCs assigned",
+			nsName: "controlled-namespace",
+			serviceAccounts: []*corev1.ServiceAccount{
+				{ObjectMeta: metav1.ObjectMeta{Name: "testspecificsa", Namespace: "controlled-namespace"}},
+			},
+			wantErr:          false,
+			expectNSUpdate:   true,
+			expectedPSaLevel: "baseline",
+		},
+		{
+			name:   "SA with restricted and privileged SCCs assigned",
+			nsName: "controlled-namespace",
+			serviceAccounts: []*corev1.ServiceAccount{
+				{ObjectMeta: metav1.ObjectMeta{Name: "testspecificsa2", Namespace: "controlled-namespace"}},
+			},
+			wantErr:          false,
+			expectNSUpdate:   true,
+			expectedPSaLevel: "privileged",
+		},
+		{
+			name:   "SA with restricted SCC assigned",
+			nsName: "controlled-namespace",
+			serviceAccounts: []*corev1.ServiceAccount{
+				{ObjectMeta: metav1.ObjectMeta{Name: "testspecificsa3", Namespace: "controlled-namespace"}},
+			},
+			wantErr:          false,
+			expectNSUpdate:   true,
+			expectedPSaLevel: "restricted",
+		},
+		{
+			name:   "SA with restricted SCC assigned in am NS with previous enforce labels",
+			nsName: "controlled-namespace-previous-enforce-labels",
+			serviceAccounts: []*corev1.ServiceAccount{
+				{ObjectMeta: metav1.ObjectMeta{Name: "testspecificsa3", Namespace: "controlled-namespace-previous-enforce-labels"}},
+			},
+			wantErr:          false,
+			expectNSUpdate:   true,
+			expectedPSaLevel: "restricted",
+		},
+		{
+			name:   "SA with restricted SCC assigned in am NS with previous warn labels",
+			nsName: "controlled-namespace-previous-warn-labels",
+			serviceAccounts: []*corev1.ServiceAccount{
+				{ObjectMeta: metav1.ObjectMeta{Name: "testspecificsa3", Namespace: "controlled-namespace-previous-warn-labels"}},
+			},
+			wantErr:          false,
+			expectNSUpdate:   true,
+			expectedPSaLevel: "restricted",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			testCtx := context.Background()
+
+			saIndexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{
+				cache.NamespaceIndex: cache.MetaNamespaceIndexFunc,
+			})
+			for _, sa := range tt.serviceAccounts {
+				require.NoError(t, saIndexer.Add(sa))
+			}
+
+			c := &PodSecurityAdmissionLabelSynchronizationController{
+				shouldEnforce: true,
+
+				namespaceClient: nsClient.CoreV1().Namespaces(),
+
+				namespaceLister:      nsLister,
+				serviceAccountLister: corev1listers.NewServiceAccountLister(saIndexer),
+				sccLister:            syncSCCLister(t),
+
+				nsLabelSelector: labelSelector,
+				saToSCCsCache:   mockCache,
+			}
+
+			nsWatcher, err := nsClient.CoreV1().Namespaces().Watch(testCtx, metav1.ListOptions{})
+			require.NoError(t, err)
+			if nsWatcher != nil {
+				defer nsWatcher.Stop()
+			}
+			var nsModified *corev1.Namespace
+			finished := make(chan bool)
+			timedCtx, timedCtxCancel := context.WithTimeout(context.Background(), 1500*time.Second)
+			go func() {
+				nsChan := nsWatcher.ResultChan()
+				for {
+					select {
+					case nsEvent := <-nsChan:
+						ns, ok := nsEvent.Object.(*corev1.Namespace)
+						require.True(t, ok)
+						if ns.Name == tt.nsName && nsEvent.Type == watch.Modified {
+							nsModified = ns
+						}
+						// check nsEvent.Type is watch.Modified
+					case <-timedCtx.Done():
+						finished <- true
+						return
+					}
+				}
+			}()
+
+			go func() {
+				if err := c.sync(testCtx, &mockedSyncContext{key: tt.nsName}); (err != nil) != tt.wantErr {
+					t.Errorf("PodSecurityAdmissionLabelSynchronizationController.sync() error = %v, wantErr %v", err, tt.wantErr)
+				}
+
+				time.Sleep(1 * time.Second)
+				timedCtxCancel()
+			}()
+
+			<-finished
+			require.Equal(t, tt.expectNSUpdate, (nsModified != nil), "expected NS update to be %v, but it was %v", tt.expectNSUpdate, nsModified)
+
+			if nsModified != nil && len(tt.expectedPSaLevel) > 0 {
+				require.Equal(t, tt.expectedPSaLevel, nsModified.Labels[psapi.EnforceLevelLabel], "unexpected PSa enforcement level")
+				require.Equal(t, "", nsModified.Labels[psapi.WarnLevelLabel], "unexpected PSa warn level")
+				require.Equal(t, "", nsModified.Labels[psapi.AuditLevelLabel], "unexpected PSa audit level")
+			}
 		})
 	}
 }
