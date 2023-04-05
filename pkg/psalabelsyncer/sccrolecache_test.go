@@ -1,6 +1,7 @@
 package psalabelsyncer
 
 import (
+	"fmt"
 	"reflect"
 	"sync"
 	"testing"
@@ -999,6 +1000,94 @@ func Test_saToSCCCache_handleSCCDeleted(t *testing.T) {
 			if !reflect.DeepEqual(c.usefulRoles, tt.expectedUsefulRoles) {
 				t.Errorf("the expected cache is different from the one retrieved: %s", cmp.Diff(tt.expectedUsefulRoles, c.usefulRoles))
 			}
+		})
+	}
+}
+
+func TestSCCRoleCache_BySAIndexKeys(t *testing.T) {
+	type subjectDef struct {
+		name      string
+		namespace string
+	}
+
+	newRBObj := func(rbNS string, subjects []subjectDef) interface{} {
+		obj := &rbacv1.RoleBinding{
+			ObjectMeta: metav1.ObjectMeta{Namespace: rbNS},
+			Subjects:   []rbacv1.Subject{},
+		}
+
+		for _, subject := range subjects {
+			obj.Subjects = append(obj.Subjects, rbacv1.Subject{
+				Kind:      "ServiceAccount",
+				Name:      subject.name,
+				Namespace: subject.namespace,
+			})
+		}
+
+		return obj
+	}
+
+	newCRBObj := func(subjects []subjectDef) interface{} {
+		obj := &rbacv1.ClusterRoleBinding{}
+
+		for _, subject := range subjects {
+			obj.Subjects = append(obj.Subjects, rbacv1.Subject{
+				Kind:      "ServiceAccount",
+				Name:      subject.name,
+				Namespace: subject.namespace,
+			})
+		}
+
+		return obj
+	}
+
+	const (
+		ns1 = "testns1"
+		sa1 = "testsa1"
+		sa2 = "testsa2"
+	)
+
+	tests := []struct {
+		name        string
+		roleBinding interface{}
+		want        []string
+	}{
+		{
+			name:        "role binding without subjects",
+			roleBinding: newRBObj(ns1, nil),
+			want:        []string{},
+		},
+		{
+			name:        "role binding with subjects with namespaces",
+			roleBinding: newRBObj(ns1, []subjectDef{{sa1, ns1}, {sa2, ns1}}),
+			want: []string{
+				fmt.Sprintf("system:serviceaccount:%s:%s", ns1, sa1),
+				fmt.Sprintf("system:serviceaccount:%s:%s", ns1, sa2),
+			},
+		},
+		{
+			name:        "role binding with subjects without namespaces",
+			roleBinding: newRBObj(ns1, []subjectDef{{sa1, ""}, {sa2, ""}}),
+			want: []string{
+				fmt.Sprintf("system:serviceaccount:%s:%s", ns1, sa1),
+				fmt.Sprintf("system:serviceaccount:%s:%s", ns1, sa2),
+			},
+		},
+		{
+			name:        "cluster role binding with subjects with namespaces",
+			roleBinding: newCRBObj([]subjectDef{{sa1, ns1}, {sa2, ns1}}),
+			want: []string{
+				fmt.Sprintf("system:serviceaccount:%s:%s", ns1, sa1),
+				fmt.Sprintf("system:serviceaccount:%s:%s", ns1, sa2),
+			},
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			subjects, err := BySAIndexKeys(testCase.roleBinding)
+			require.Nil(t, err)
+			require.Equal(t, testCase.want, subjects)
 		})
 	}
 }
