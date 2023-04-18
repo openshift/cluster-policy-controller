@@ -4,7 +4,7 @@ Controllers managed by cluster-policy-controller are:
 * cluster quota reconcilion - manages cluster quota usage
 * namespace SCC allocation controller - allocates UIDs and SELinux labels for namespaces     
 * cluster csr approver controller - csr approver for monitoring scraping
-* podsecurity admission label syncer controller - configure the PodSecurity admission namespace label
+* podsecurity admission label syncer controller - configure the PodSecurity admission namespace label for namespaces with "security.openshift.io/scc.podSecurityLabelSync: true" label
 
 The `cluster-policy-controller` runs as a container in the `openshift-kube-controller-manager namespace`, in the kube-controller-manager static pod.
 This pod is defined and managed by the [`kube-controller-manager`](https://github.com/openshift/cluster-kube-controller-manager-operator/)
