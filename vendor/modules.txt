@@ -167,7 +167,6 @@ github.com/openshift/api/pkg/serialization
 github.com/openshift/api/project
 github.com/openshift/api/project/v1
 github.com/openshift/api/quota/v1
-github.com/openshift/api/route/v1
 github.com/openshift/api/security
 github.com/openshift/api/security/v1
 github.com/openshift/api/securityinternal/v1
@@ -187,30 +186,8 @@ github.com/openshift/build-machinery-go/make/targets/openshift/operator
 github.com/openshift/build-machinery-go/scripts
 # github.com/openshift/client-go v0.0.0-20220525160904-9e1acff93e4a
 ## explicit; go 1.16
-github.com/openshift/client-go/apps/clientset/versioned
-github.com/openshift/client-go/apps/clientset/versioned/scheme
-github.com/openshift/client-go/apps/clientset/versioned/typed/apps/v1
-github.com/openshift/client-go/apps/informers/externalversions
-github.com/openshift/client-go/apps/informers/externalversions/apps
-github.com/openshift/client-go/apps/informers/externalversions/apps/v1
-github.com/openshift/client-go/apps/informers/externalversions/internalinterfaces
-github.com/openshift/client-go/apps/listers/apps/v1
-github.com/openshift/client-go/build/clientset/versioned
-github.com/openshift/client-go/build/clientset/versioned/scheme
-github.com/openshift/client-go/build/clientset/versioned/typed/build/v1
-github.com/openshift/client-go/build/informers/externalversions
-github.com/openshift/client-go/build/informers/externalversions/build
-github.com/openshift/client-go/build/informers/externalversions/build/v1
-github.com/openshift/client-go/build/informers/externalversions/internalinterfaces
-github.com/openshift/client-go/build/listers/build/v1
-github.com/openshift/client-go/config/clientset/versioned
 github.com/openshift/client-go/config/clientset/versioned/scheme
 github.com/openshift/client-go/config/clientset/versioned/typed/config/v1
-github.com/openshift/client-go/config/informers/externalversions
-github.com/openshift/client-go/config/informers/externalversions/config
-github.com/openshift/client-go/config/informers/externalversions/config/v1
-github.com/openshift/client-go/config/informers/externalversions/internalinterfaces
-github.com/openshift/client-go/config/listers/config/v1
 github.com/openshift/client-go/image/clientset/versioned
 github.com/openshift/client-go/image/clientset/versioned/fake
 github.com/openshift/client-go/image/clientset/versioned/scheme
@@ -221,17 +198,6 @@ github.com/openshift/client-go/image/informers/externalversions/image
 github.com/openshift/client-go/image/informers/externalversions/image/v1
 github.com/openshift/client-go/image/informers/externalversions/internalinterfaces
 github.com/openshift/client-go/image/listers/image/v1
-github.com/openshift/client-go/operator/clientset/versioned
-github.com/openshift/client-go/operator/clientset/versioned/scheme
-github.com/openshift/client-go/operator/clientset/versioned/typed/operator/v1
-github.com/openshift/client-go/operator/clientset/versioned/typed/operator/v1alpha1
-github.com/openshift/client-go/operator/informers/externalversions
-github.com/openshift/client-go/operator/informers/externalversions/internalinterfaces
-github.com/openshift/client-go/operator/informers/externalversions/operator
-github.com/openshift/client-go/operator/informers/externalversions/operator/v1
-github.com/openshift/client-go/operator/informers/externalversions/operator/v1alpha1
-github.com/openshift/client-go/operator/listers/operator/v1
-github.com/openshift/client-go/operator/listers/operator/v1alpha1
 github.com/openshift/client-go/quota/clientset/versioned
 github.com/openshift/client-go/quota/clientset/versioned/fake
 github.com/openshift/client-go/quota/clientset/versioned/scheme
@@ -242,14 +208,6 @@ github.com/openshift/client-go/quota/informers/externalversions/internalinterfac
 github.com/openshift/client-go/quota/informers/externalversions/quota
 github.com/openshift/client-go/quota/informers/externalversions/quota/v1
 github.com/openshift/client-go/quota/listers/quota/v1
-github.com/openshift/client-go/route/clientset/versioned
-github.com/openshift/client-go/route/clientset/versioned/scheme
-github.com/openshift/client-go/route/clientset/versioned/typed/route/v1
-github.com/openshift/client-go/route/informers/externalversions
-github.com/openshift/client-go/route/informers/externalversions/internalinterfaces
-github.com/openshift/client-go/route/informers/externalversions/route
-github.com/openshift/client-go/route/informers/externalversions/route/v1
-github.com/openshift/client-go/route/listers/route/v1
 github.com/openshift/client-go/security/clientset/versioned
 github.com/openshift/client-go/security/clientset/versioned/scheme
 github.com/openshift/client-go/security/clientset/versioned/typed/security/v1
@@ -263,14 +221,6 @@ github.com/openshift/client-go/securityinternal/clientset/versioned/fake
 github.com/openshift/client-go/securityinternal/clientset/versioned/scheme
 github.com/openshift/client-go/securityinternal/clientset/versioned/typed/securityinternal/v1
 github.com/openshift/client-go/securityinternal/clientset/versioned/typed/securityinternal/v1/fake
-github.com/openshift/client-go/template/clientset/versioned
-github.com/openshift/client-go/template/clientset/versioned/scheme
-github.com/openshift/client-go/template/clientset/versioned/typed/template/v1
-github.com/openshift/client-go/template/informers/externalversions
-github.com/openshift/client-go/template/informers/externalversions/internalinterfaces
-github.com/openshift/client-go/template/informers/externalversions/template
-github.com/openshift/client-go/template/informers/externalversions/template/v1
-github.com/openshift/client-go/template/listers/template/v1
 # github.com/openshift/library-go v0.0.0-20220525173854-9b950a41acdc
 ## explicit; go 1.17
 github.com/openshift/library-go/pkg/authorization/hardcodedauthorizer
