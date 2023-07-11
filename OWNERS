@@ -4,12 +4,12 @@ reviewers:
   - soltysh
   - deads2k
   - stlaz
-  - sttts
+  - ingvagabund
 approvers:
   - atiratree
   - mfojtik
   - soltysh
   - deads2k
   - stlaz
-  - sttts
+  - ingvagabund
 component: "kube-controller-manager"
