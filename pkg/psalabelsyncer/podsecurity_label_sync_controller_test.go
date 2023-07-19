@@ -444,8 +444,8 @@ func TestEnforcingPodSecurityAdmissionLabelSynchronizationController_sync(t *tes
 
 			if nsModified != nil && len(tt.expectedPSaLevel) > 0 {
 				require.Equal(t, tt.expectedPSaLevel, nsModified.Labels[psapi.EnforceLevelLabel], "unexpected PSa enforcement level")
-				require.Equal(t, "", nsModified.Labels[psapi.WarnLevelLabel], "unexpected PSa warn level")
-				require.Equal(t, "", nsModified.Labels[psapi.AuditLevelLabel], "unexpected PSa audit level")
+				require.Equal(t, tt.expectedPSaLevel, nsModified.Labels[psapi.WarnLevelLabel], "unexpected PSa warn level")
+				require.Equal(t, tt.expectedPSaLevel, nsModified.Labels[psapi.AuditLevelLabel], "unexpected PSa audit level")
 			}
 		})
 	}
