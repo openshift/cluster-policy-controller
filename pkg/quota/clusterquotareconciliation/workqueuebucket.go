@@ -4,7 +4,6 @@ import (
 	"sync"
 
 	"k8s.io/client-go/util/workqueue"
-	"k8s.io/klog/v2"
 )
 
 // BucketingWorkQueue gives a way to add items related to a single entry in a work queue
@@ -47,7 +46,6 @@ func (e *workQueueBucket) AddWithData(key interface{}, data ...interface{}) {
 	// this Add can trigger a Get BEFORE the work is added to a list, but this is ok because the getWork routine
 	// waits the worklock before retrieving the work to do, so the writes in this method will be observed
 	e.queue.Add(key)
-	klog.V(2).Infof("key %s is added with data into queue", key)
 
 	if e.inProgress[key] {
 		e.dirtyWork[key] = append(e.dirtyWork[key], data...)
@@ -64,7 +62,6 @@ func (e *workQueueBucket) AddWithDataRateLimited(key interface{}, data ...interf
 	// this Add can trigger a Get BEFORE the work is added to a list, but this is ok because the getWork routine
 	// waits the worklock before retrieving the work to do, so the writes in this method will be observed
 	e.queue.AddRateLimited(key)
-	klog.V(2).Infof("key %s is added rate limited with data into queue", key)
 
 	if e.inProgress[key] {
 		e.dirtyWork[key] = append(e.dirtyWork[key], data...)
@@ -79,7 +76,6 @@ func (e *workQueueBucket) Done(key interface{}) {
 	defer e.workLock.Unlock()
 
 	e.queue.Done(key)
-	klog.V(2).Infof("key %s in the queue is marked as done", key)
 
 	e.work[key] = e.dirtyWork[key]
 	delete(e.dirtyWork, key)
@@ -96,14 +92,12 @@ func (e *workQueueBucket) GetWithData() (interface{}, []interface{}, bool) {
 		return nil, []interface{}{}, shutdown
 	}
 
-	klog.V(2).Infof("key %s is gotten from queue", key)
 	e.workLock.Lock()
 	defer e.workLock.Unlock()
 	// at this point, we know we have a coherent view of e.work.  It is entirely possible
 	// that our workqueue has another item requeued to it, but we'll pick it up early.  This ok
 	// because the next time will go into our dirty list
 
-	klog.V(2).Infof("lock acquired and key %s is added in progress list", key)
 	work := e.work[key]
 	delete(e.work, key)
 	delete(e.dirtyWork, key)
