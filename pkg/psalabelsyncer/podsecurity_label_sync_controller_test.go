@@ -3,6 +3,7 @@ package psalabelsyncer
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -35,7 +36,7 @@ var (
 		{ObjectMeta: metav1.ObjectMeta{Name: "controlled-namespace-terminating", Annotations: map[string]string{securityv1.UIDRangeAnnotation: "1000/1052"}}, Status: corev1.NamespaceStatus{Phase: corev1.NamespaceTerminating}},
 		{ObjectMeta: metav1.ObjectMeta{Name: "controlled-namespace-without-uid-annotation"}},
 		{ObjectMeta: metav1.ObjectMeta{Name: "controlled-namespace-previous-enforce-labels", Annotations: map[string]string{securityv1.UIDRangeAnnotation: "1000/1052"}, Labels: map[string]string{psapi.EnforceLevelLabel: "bogus value", psapi.EnforceVersionLabel: "bogus version value"}}},
-		{ObjectMeta: metav1.ObjectMeta{Name: "controlled-namespace-previous-warn-labels", Annotations: map[string]string{securityv1.UIDRangeAnnotation: "1000/1052"}, Labels: map[string]string{psapi.WarnLevelLabel: "bogus value", psapi.WarnVersionLabel: "bogus version value"}}},
+		{ObjectMeta: metav1.ObjectMeta{Name: "controlled-namespace-previous-warn-labels", Annotations: map[string]string{securityv1.UIDRangeAnnotation: "1000/1052"}, Labels: map[string]string{psapi.WarnLevelLabel: "bogus value", psapi.WarnVersionLabel: "bogus version value"}, ManagedFields: managedLabelsFields("cluster-policy-controller", psapi.WarnLevelLabel, psapi.WarnVersionLabel)}},
 		{ObjectMeta: metav1.ObjectMeta{Name: "non-controlled-namespace", Labels: map[string]string{"security.openshift.io/scc.podSecurityLabelSync": "false"}, Annotations: map[string]string{securityv1.UIDRangeAnnotation: "1000/1052"}}},
 	}
 )
@@ -115,6 +116,34 @@ func TestPodSecurityAdmissionLabelSynchronizationController_isNSControlled(t *te
 		{ObjectMeta: metav1.ObjectMeta{Name: "tested-ns", Labels: map[string]string{"security.openshift.io/scc.podSecurityLabelSync": "false"}}},
 		{ObjectMeta: metav1.ObjectMeta{Name: "willing-tested-ns", Labels: map[string]string{"security.openshift.io/scc.podSecurityLabelSync": "true"}}},
 		{ObjectMeta: metav1.ObjectMeta{Name: "nihilistic-tested-ns"}},
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:          "nihilistic-tested-ns-with-foreign-managed-labels",
+				Labels:        map[string]string{psapi.EnforceLevelLabel: "restricted"},
+				ManagedFields: managedLabelsFields("completely-different-controller", psapi.EnforceLevelLabel),
+			},
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:          "willing-tested-ns-with-foreign-managed-labels",
+				Labels:        map[string]string{psapi.EnforceLevelLabel: "restricted", "security.openshift.io/scc.podSecurityLabelSync": "true"},
+				ManagedFields: managedLabelsFields("completely-different-controller", psapi.EnforceLevelLabel),
+			},
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:          "nihilistic-tested-ns-with-our-managed-labels",
+				Labels:        map[string]string{psapi.EnforceLevelLabel: "restricted"},
+				ManagedFields: managedLabelsFields("cluster-policy-controller", psapi.EnforceLevelLabel),
+			},
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:          "tested-ns-with-our-managed-labels",
+				Labels:        map[string]string{psapi.EnforceLevelLabel: "restricted", "security.openshift.io/scc.podSecurityLabelSync": "false"},
+				ManagedFields: managedLabelsFields("cluster-policy-controller", psapi.EnforceLevelLabel),
+			},
+		},
 	} {
 		require.NoError(t, namespaces.Add(ns))
 	}
@@ -179,6 +208,30 @@ func TestPodSecurityAdmissionLabelSynchronizationController_isNSControlled(t *te
 			name:    "NS created by a user who needs to know what they are doing - sync label",
 			nsName:  "openshift-user-created-controlled",
 			want:    true,
+			wantErr: false,
+		},
+		{
+			name:    "NS that does not care but has PSa labels already managed by someone else",
+			nsName:  "nihilistic-tested-ns-with-foreign-managed-labels",
+			want:    false,
+			wantErr: false,
+		},
+		{
+			name:    "NS that wants to be synced even though someone else already manages the labels",
+			nsName:  "willing-tested-ns-with-foreign-managed-labels",
+			want:    true,
+			wantErr: false,
+		},
+		{
+			name:    "NS that does not care and has PSa labels already managed by us",
+			nsName:  "nihilistic-tested-ns-with-our-managed-labels",
+			want:    true,
+			wantErr: false,
+		},
+		{
+			name:    "NS that does not want to be synced but has labels managed by us",
+			nsName:  "tested-ns-with-our-managed-labels",
+			want:    false,
 			wantErr: false,
 		},
 	}
@@ -644,4 +697,25 @@ func (c *mockedSyncContext) QueueKey() string {
 
 func (c *mockedSyncContext) Recorder() events.Recorder {
 	return nil
+}
+
+func managedLabelsFields(manager string, labelKeys ...string) []metav1.ManagedFieldsEntry {
+	if len(labelKeys) == 0 {
+		return []metav1.ManagedFieldsEntry{}
+	}
+
+	rawVals := []string{}
+	for _, labelKey := range labelKeys {
+		rawVals = append(rawVals, fmt.Sprintf(`"f:%s": {}`, labelKey))
+	}
+	fieldsRaw := []byte(`{"f:metadata":{"f:labels":{` + strings.Join(rawVals, ",") + "}}}")
+
+	return []metav1.ManagedFieldsEntry{
+		{
+			FieldsV1:  &metav1.FieldsV1{Raw: fieldsRaw},
+			Manager:   manager,
+			Operation: metav1.ManagedFieldsOperationApply,
+		},
+	}
+
 }

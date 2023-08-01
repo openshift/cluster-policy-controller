@@ -13,6 +13,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/selection"
 	"k8s.io/apimachinery/pkg/util/sets"
+	corev1apply "k8s.io/client-go/applyconfigurations/core/v1"
 	corev1informers "k8s.io/client-go/informers/core/v1"
 	rbacv1informers "k8s.io/client-go/informers/rbac/v1"
 	corev1client "k8s.io/client-go/kubernetes/typed/core/v1"
@@ -34,6 +35,17 @@ const (
 	controllerName        = "pod-security-admission-label-synchronization-controller"
 	labelSyncControlLabel = "security.openshift.io/scc.podSecurityLabelSync"
 	currentPSaVersion     = "v1.24"
+	managerName           = "cluster-policy-controller" // for historical reasons we cannot use controllerName for server-side patching
+)
+
+var (
+	enforcementLabels = map[string]string{
+		psapi.EnforceLevelLabel: psapi.EnforceVersionLabel,
+	}
+	loggingLabels = map[string]string{
+		psapi.WarnLevelLabel:  psapi.WarnVersionLabel,
+		psapi.AuditLevelLabel: psapi.AuditVersionLabel,
+	}
 )
 
 // PodSecurityAdmissionLabelSynchronizationController watches over namespaces labelled with
@@ -250,57 +262,38 @@ func (c *PodSecurityAdmissionLabelSynchronizationController) syncNamespace(ctx c
 		return fmt.Errorf("unknown PSa level for namespace %q", ns.Name)
 	}
 
-	nsCopy := ns.DeepCopy()
+	managedNamespaces, err := extractNSFieldsPerManager(ns)
+	if err != nil {
+		return fmt.Errorf("ns extraction failed: %w", err)
+	}
+	syncedLabels := enforcementLabels
+	if !c.shouldEnforce {
+		syncedLabels = loggingLabels
+	}
 
-	var changed bool
-
-	if c.shouldEnforce {
-		if nsCopy.Labels[psapi.EnforceLevelLabel] != string(psaLevel) || nsCopy.Labels[psapi.EnforceVersionLabel] != currentPSaVersion {
-			changed = true
-			if nsCopy.Labels == nil {
-				nsCopy.Labels = map[string]string{}
-			}
-
-			nsCopy.Labels[psapi.EnforceLevelLabel] = string(psaLevel)
-			nsCopy.Labels[psapi.EnforceVersionLabel] = currentPSaVersion
-		}
-
-		// cleanup audit and warn labels from version 4.11
-		// TODO: This can be removed in 4.13 and allow users set these as they wish
-		for typeLabel, versionLabel := range map[string]string{
-			psapi.WarnLevelLabel:  psapi.WarnVersionLabel,
-			psapi.AuditLevelLabel: psapi.AuditVersionLabel,
-		} {
-			if _, ok := nsCopy.Labels[typeLabel]; ok {
-				delete(nsCopy.Labels, typeLabel)
-				changed = true
-			}
-			if _, ok := nsCopy.Labels[versionLabel]; ok {
-				delete(nsCopy.Labels, versionLabel)
-				changed = true
-			}
-		}
-	} else {
-		for typeLabel, versionLabel := range map[string]string{
-			psapi.WarnLevelLabel:  psapi.WarnVersionLabel,
-			psapi.AuditLevelLabel: psapi.AuditVersionLabel,
-		} {
-			if ns.Labels[typeLabel] != string(psaLevel) || ns.Labels[versionLabel] != currentPSaVersion {
-				changed = true
-				if nsCopy.Labels == nil {
-					nsCopy.Labels = map[string]string{}
-				}
-
-				nsCopy.Labels[typeLabel] = string(psaLevel)
-				nsCopy.Labels[versionLabel] = currentPSaVersion
-
-			}
+	nsApplyConfig := corev1apply.Namespace(ns.Name)
+	for typeLabel, versionLabel := range syncedLabels {
+		if ns.Labels[typeLabel] != string(psaLevel) || ns.Labels[versionLabel] != currentPSaVersion {
+			nsApplyConfig.WithLabels(map[string]string{
+				typeLabel:    string(psaLevel),
+				versionLabel: currentPSaVersion,
+			})
 		}
 	}
 
-	if changed {
-		_, err := c.namespaceClient.Update(ctx, nsCopy, metav1.UpdateOptions{})
+	for labelKey := range nsApplyConfig.Labels {
+		if manager := managedNamespaces.getManagerForLabel(labelKey); len(manager) > 0 && manager != controllerName {
+			delete(nsApplyConfig.Labels, labelKey)
+		}
+	}
+
+	if len(nsApplyConfig.Labels) > 0 {
+		_, err := c.namespaceClient.Apply(ctx, nsApplyConfig, metav1.ApplyOptions{FieldManager: controllerName})
 		if err != nil {
+			if apierrors.IsConflict(err) {
+				klog.V(4).Info("someone else is already managing the PSa labels: %v", err)
+				return nil
+			}
 			return fmt.Errorf("failed to update the namespace: %w", err)
 		}
 	}
@@ -394,12 +387,45 @@ func isNSControlled(ns *corev1.Namespace) bool {
 		return false
 	}
 
+	if ns.Labels[labelSyncControlLabel] == "true" {
+		return true
+	}
+
 	// while "openshift-" namespaces should be considered controlled, there are some
 	// edge cases where users can also create them. Consider these a special case
 	// and delegate the decision to sync on the user who should know what they are
 	// doing when creating a NS that appears to be system-controlled.
 	if strings.HasPrefix(nsName, "openshift-") {
-		return ns.Labels[labelSyncControlLabel] == "true"
+		return false
+	}
+
+	extractedPerManager, err := extractNSFieldsPerManager(ns)
+	if err != nil {
+		klog.Errorf("ns extraction failed: %v", err)
+		return false
+	}
+
+	var labelsOwned, owningAtLeastOneLabel bool
+	for _, labelName := range []string{
+		psapi.EnforceLevelLabel, psapi.EnforceVersionLabel,
+		psapi.WarnLevelLabel, psapi.WarnVersionLabel,
+		psapi.AuditLevelLabel, psapi.AuditVersionLabel,
+	} {
+		if _, ok := ns.Labels[labelName]; ok {
+			if manager := extractedPerManager.getManagerForLabel(labelName); len(manager) > 0 && !(manager == "cluster-policy-controller" || manager == controllerName) {
+				labelsOwned = true
+				continue
+			}
+			labelsOwned = true
+			owningAtLeastOneLabel = true
+		} else {
+			// a label that is not set is owned by us
+			owningAtLeastOneLabel = true
+		}
+	}
+
+	if labelsOwned && !owningAtLeastOneLabel {
+		return false
 	}
 
 	return ns.Labels[labelSyncControlLabel] != "false"
@@ -414,4 +440,57 @@ func controlledNamespacesLabelSelector() (labels.Selector, error) {
 	}
 
 	return labels.NewSelector().Add(*labelRequirement), nil
+}
+
+// extractedNamespaces serves as a cache so that we don't have to re-extract the namespaces
+// for each label. It helps us prevent performance overhead from multiple deserializations.
+type extractedNamespaces map[string]sets.Set[string]
+
+func extractNSFieldsPerManager(ns *corev1.Namespace) (extractedNamespaces, error) {
+	ret := extractedNamespaces{}
+	for _, fieldEntry := range ns.ManagedFields {
+		managedLabels, err := managedLabels(fieldEntry)
+		if err != nil {
+			return nil, fmt.Errorf("failed to extract managed fields for NS %q: %v", ns.Name, err)
+		}
+		if current, ok := ret[fieldEntry.Manager]; ok {
+			ret[fieldEntry.Manager] = current.Union(managedLabels)
+		} else {
+			ret[fieldEntry.Manager] = managedLabels
+		}
+	}
+	return ret, nil
+}
+
+func (n extractedNamespaces) getManagerForLabel(labelName string) string {
+	for manager, extractedNS := range n {
+		if _, managed := extractedNS[labelName]; managed {
+			return manager
+		}
+	}
+	return ""
+}
+
+func managedLabels(fieldsEntry metav1.ManagedFieldsEntry) (sets.Set[string], error) {
+	managedUnstructured := map[string]interface{}{}
+	err := json.Unmarshal(fieldsEntry.FieldsV1.Raw, &managedUnstructured)
+	if err != nil {
+		return nil, fmt.Errorf("failed to unmarshal managed fields: %w", err)
+	}
+
+	labels, found, err := unstructured.NestedMap(managedUnstructured, "f:metadata", "f:labels")
+	if err != nil {
+		return nil, fmt.Errorf("failed to get labels from the managed fields: %w", err)
+	}
+
+	ret := sets.New[string]()
+	if !found {
+		return ret, nil
+	}
+
+	for l := range labels {
+		ret.Insert(strings.Replace(l, "f:", "", 1))
+	}
+
+	return ret, nil
 }
