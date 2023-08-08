@@ -2,6 +2,7 @@ package psalabelsyncer
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -9,6 +10,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/selection"
@@ -35,7 +37,6 @@ const (
 	controllerName        = "pod-security-admission-label-synchronization-controller"
 	labelSyncControlLabel = "security.openshift.io/scc.podSecurityLabelSync"
 	currentPSaVersion     = "v1.24"
-	managerName           = "cluster-policy-controller" // for historical reasons we cannot use controllerName for server-side patching
 )
 
 var (
@@ -203,11 +204,83 @@ func (c *PodSecurityAdmissionLabelSynchronizationController) sync(ctx context.Co
 		return nil
 	}
 
+	ns, err = forceHistoricalLabelsOwnership(ctx, c.namespaceClient, ns)
+	if err != nil {
+		return fmt.Errorf("failed to force ownership from cluster-policy-controller to %s: %w", controllerName, err)
+	}
+
 	if err := c.syncNamespace(ctx, controllerContext, ns); err != nil {
 		return fmt.Errorf(errFmt, qKey, err)
 	}
 
 	return nil
+}
+
+func forceHistoricalLabelsOwnership(ctx context.Context, nsClient corev1client.NamespaceInterface, ns *corev1.Namespace) (*corev1.Namespace, error) {
+	cpcOwnedLabelKeys := sets.New[string]()
+	for _, f := range ns.ManagedFields {
+		if f.Manager != "cluster-policy-controller" {
+			continue
+		}
+
+		newCPCLabels, err := managedLabels(f)
+		if err != nil {
+			return nil, err
+		}
+
+		cpcOwnedLabelKeys = cpcOwnedLabelKeys.Union(newCPCLabels)
+	}
+
+	if cpcOwnedLabelKeys.Len() == 0 {
+		return ns, nil
+	}
+
+	cpcOwnedPSaLabels := map[string]string{}
+	// filter out all the labels not owned by this controller
+	for _, labelMap := range []map[string]string{enforcementLabels, loggingLabels} {
+		for labelType, labelVersion := range labelMap {
+			if cpcOwnedLabelKeys.Has(labelType) {
+				cpcOwnedPSaLabels[labelType] = ns.Labels[labelType]
+			}
+			if cpcOwnedLabelKeys.Has(labelVersion) {
+				cpcOwnedPSaLabels[labelVersion] = ns.Labels[labelVersion]
+			}
+		}
+	}
+
+	// none of the labels CPC is managing are interesting to us
+	if len(cpcOwnedPSaLabels) == 0 {
+		return ns, nil
+	}
+
+	// we need to extract all our managed fields not to delete them on the apply below
+	ourOwned, err := corev1apply.ExtractNamespace(ns, controllerName)
+	if err != nil {
+		return nil, err
+	}
+
+	// add the PSa labels that were previously owned by CPC under this manager
+	ourOwned.WithLabels(cpcOwnedPSaLabels)
+
+	nsCopy := ns.DeepCopy()
+	for labelKey := range cpcOwnedPSaLabels {
+		delete(nsCopy.Labels, labelKey)
+	}
+
+	// previously, we were using Update to set the labels, Kube does not consider that as actually owning the fields, even
+	// though it shows up in managedFields and would cause conflicts on value change. Eh. Ugly.
+	//
+	// Writing custom logic that checks which fields are _really_ managed by a manager, caches the unstructured object and then
+	// conditionally removes the label from all those unstructured fields and shoves them back in the proper place
+	// in the object managedFields is tedious, ugly and super error-prone.
+	//
+	// Just remove the fields as the previous owner and quickly readd them as the new one.
+	if _, err = nsClient.Update(ctx, nsCopy, metav1.UpdateOptions{FieldManager: "cluster-policy-controller"}); err != nil {
+		return nil, fmt.Errorf("failed to share PSa label ownership with the previous owner: %w", err)
+	}
+
+	// take ownership of the fields since they should all be clear now
+	return nsClient.Apply(ctx, ourOwned, metav1.ApplyOptions{FieldManager: controllerName})
 }
 
 func (c *PodSecurityAdmissionLabelSynchronizationController) syncNamespace(ctx context.Context, controllerContext factory.SyncContext, ns *corev1.Namespace) error {
