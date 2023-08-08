@@ -3,12 +3,17 @@ package psalabelsyncer
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
 
+	securityv1 "github.com/openshift/api/security/v1"
+	securityv1informers "github.com/openshift/client-go/security/informers/externalversions/security/v1"
+	securityv1listers "github.com/openshift/client-go/security/listers/security/v1"
+	"github.com/openshift/library-go/pkg/controller/factory"
+	"github.com/openshift/library-go/pkg/operator/events"
 	"github.com/stretchr/testify/require"
-
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -21,12 +26,6 @@ import (
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/util/workqueue"
 	psapi "k8s.io/pod-security-admission/api"
-
-	securityv1 "github.com/openshift/api/security/v1"
-	securityv1informers "github.com/openshift/client-go/security/informers/externalversions/security/v1"
-	securityv1listers "github.com/openshift/client-go/security/listers/security/v1"
-	"github.com/openshift/library-go/pkg/controller/factory"
-	"github.com/openshift/library-go/pkg/operator/events"
 )
 
 var (
@@ -36,6 +35,7 @@ var (
 		{ObjectMeta: metav1.ObjectMeta{Name: "controlled-namespace-terminating", Annotations: map[string]string{securityv1.UIDRangeAnnotation: "1000/1052"}}, Status: corev1.NamespaceStatus{Phase: corev1.NamespaceTerminating}},
 		{ObjectMeta: metav1.ObjectMeta{Name: "controlled-namespace-without-uid-annotation"}},
 		{ObjectMeta: metav1.ObjectMeta{Name: "controlled-namespace-previous-enforce-labels", Annotations: map[string]string{securityv1.UIDRangeAnnotation: "1000/1052"}, Labels: map[string]string{psapi.EnforceLevelLabel: "bogus value", psapi.EnforceVersionLabel: "bogus version value"}}},
+		{ObjectMeta: metav1.ObjectMeta{Name: "controlled-namespace-previous-enforce-version-different-owner", Annotations: map[string]string{securityv1.UIDRangeAnnotation: "1000/1052"}, Labels: map[string]string{psapi.EnforceVersionLabel: "bogus version value"}, ManagedFields: managedLabelsFields("someone-else", psapi.EnforceVersionLabel)}},
 		{ObjectMeta: metav1.ObjectMeta{Name: "controlled-namespace-previous-warn-labels", Annotations: map[string]string{securityv1.UIDRangeAnnotation: "1000/1052"}, Labels: map[string]string{psapi.WarnLevelLabel: "bogus value", psapi.WarnVersionLabel: "bogus version value"}, ManagedFields: managedLabelsFields("cluster-policy-controller", psapi.WarnLevelLabel, psapi.WarnVersionLabel)}},
 		{ObjectMeta: metav1.ObjectMeta{Name: "non-controlled-namespace", Labels: map[string]string{"security.openshift.io/scc.podSecurityLabelSync": "false"}, Annotations: map[string]string{securityv1.UIDRangeAnnotation: "1000/1052"}}},
 	}
@@ -119,8 +119,8 @@ func TestPodSecurityAdmissionLabelSynchronizationController_isNSControlled(t *te
 		{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:          "nihilistic-tested-ns-with-foreign-managed-labels",
-				Labels:        map[string]string{psapi.EnforceLevelLabel: "restricted"},
-				ManagedFields: managedLabelsFields("completely-different-controller", psapi.EnforceLevelLabel),
+				Labels:        map[string]string{psapi.EnforceLevelLabel: "restricted", psapi.EnforceVersionLabel: "latest", psapi.WarnLevelLabel: "restricted", psapi.WarnVersionLabel: "latest", psapi.AuditLevelLabel: "restricted", psapi.AuditVersionLabel: "latest"},
+				ManagedFields: managedLabelsFields("completely-different-controller", psapi.EnforceLevelLabel, psapi.EnforceVersionLabel, psapi.WarnLevelLabel, psapi.WarnVersionLabel, psapi.AuditLevelLabel, psapi.AuditVersionLabel),
 			},
 		},
 		{
@@ -142,6 +142,20 @@ func TestPodSecurityAdmissionLabelSynchronizationController_isNSControlled(t *te
 				Name:          "tested-ns-with-our-managed-labels",
 				Labels:        map[string]string{psapi.EnforceLevelLabel: "restricted", "security.openshift.io/scc.podSecurityLabelSync": "false"},
 				ManagedFields: managedLabelsFields("cluster-policy-controller", psapi.EnforceLevelLabel),
+			},
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:          "nihilistic-tested-ns-with-some-other-managed-labels",
+				Labels:        map[string]string{psapi.EnforceLevelLabel: "restricted"},
+				ManagedFields: managedLabelsFields("completely-different-controller", "some-random-label"),
+			},
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:          "nihilistic-tested-ns-with-foreign-version-managed-label",
+				Labels:        map[string]string{psapi.EnforceVersionLabel: "latest"},
+				ManagedFields: managedLabelsFields("completely-different-controller", psapi.EnforceVersionLabel),
 			},
 		},
 	} {
@@ -232,6 +246,18 @@ func TestPodSecurityAdmissionLabelSynchronizationController_isNSControlled(t *te
 			name:    "NS that does not want to be synced but has labels managed by us",
 			nsName:  "tested-ns-with-our-managed-labels",
 			want:    false,
+			wantErr: false,
+		},
+		{
+			name:    "NS that does not care and has some labels managed by someone else",
+			nsName:  "nihilistic-tested-ns-with-some-other-managed-labels",
+			want:    true,
+			wantErr: false,
+		},
+		{
+			name:    "NS that does not care and has some of PSa labels managed by someone else",
+			nsName:  "nihilistic-tested-ns-with-foreign-version-managed-label",
+			want:    true,
 			wantErr: false,
 		},
 	}
@@ -337,11 +363,12 @@ func TestEnforcingPodSecurityAdmissionLabelSynchronizationController_sync(t *tes
 
 	mockCache := &mockSAToSCCCache{
 		mockCache: map[string]sets.String{
-			"controlled-namespace/testspecificsa":                          sets.NewString("scc_restricted", "scc_baseline"),
-			"controlled-namespace/testspecificsa2":                         sets.NewString("scc_restricted", "scc_privileged"),
-			"controlled-namespace/testspecificsa3":                         sets.NewString("scc_restricted"),
-			"controlled-namespace-previous-enforce-labels/testspecificsa3": sets.NewString("scc_restricted"),
-			"controlled-namespace-previous-warn-labels/testspecificsa3":    sets.NewString("scc_restricted"),
+			"controlled-namespace/testspecificsa":                                           sets.NewString("scc_restricted", "scc_baseline"),
+			"controlled-namespace/testspecificsa2":                                          sets.NewString("scc_restricted", "scc_privileged"),
+			"controlled-namespace/testspecificsa3":                                          sets.NewString("scc_restricted"),
+			"controlled-namespace-previous-enforce-labels/testspecificsa3":                  sets.NewString("scc_restricted"),
+			"controlled-namespace-previous-warn-labels/testspecificsa3":                     sets.NewString("scc_restricted"),
+			"controlled-namespace-previous-enforce-version-different-owner/testspecificsa3": sets.NewString("scc_restricted"),
 		},
 	}
 
@@ -423,10 +450,10 @@ func TestEnforcingPodSecurityAdmissionLabelSynchronizationController_sync(t *tes
 			expectedPSaLevel: "restricted",
 		},
 		{
-			name:   "SA with restricted SCC assigned in am NS with previous warn labels",
-			nsName: "controlled-namespace-previous-warn-labels",
+			name:   "SA with restricted SCC, NS with previous enforce version managed by someone else",
+			nsName: "controlled-namespace-previous-enforce-version-different-owner",
 			serviceAccounts: []*corev1.ServiceAccount{
-				{ObjectMeta: metav1.ObjectMeta{Name: "testspecificsa3", Namespace: "controlled-namespace-previous-warn-labels"}},
+				{ObjectMeta: metav1.ObjectMeta{Name: "testspecificsa3", Namespace: "controlled-namespace-previous-enforce-version-different-owner"}},
 			},
 			wantErr:          false,
 			expectNSUpdate:   true,
@@ -718,4 +745,71 @@ func managedLabelsFields(manager string, labelKeys ...string) []metav1.ManagedFi
 		},
 	}
 
+}
+
+func Test_extractNSFieldsPerManager(t *testing.T) {
+	tests := []struct {
+		name    string
+		ns      *corev1.Namespace
+		want    extractedNamespaces
+		wantErr bool
+	}{
+		{
+			name: "some test",
+			ns: &corev1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "pokus",
+					Annotations: map[string]string{
+						"openshift.io/sa.scc.mcs":                 "s0:c26,c15",
+						"openshift.io/sa.scc.supplemental-groups": "1000680000 / 10000",
+						"openshift.io/sa.scc.uid-range":           "1000680000 / 10000",
+					}, Labels: map[string]string{
+						"kubernetes.io/metadata.name":                "pokus",
+						"pod-security.kubernetes.io/enforce-version": "latest",
+					},
+					ManagedFields: []metav1.ManagedFieldsEntry{
+						{
+							APIVersion: "v1",
+							FieldsType: "FieldsV1",
+							FieldsV1: &metav1.FieldsV1{
+								Raw: []byte(`{"f:metadata": {"f:annotations": {"f:openshift.io/sa.scc.mcs": {},"f:openshift.io/sa.scc.supplemental-groups": {},"f:openshift.io/sa.scc.uid-range": {}}}}`)},
+							Manager:   "cluster-policy-controller",
+							Operation: "Update",
+						},
+						{APIVersion: "v1",
+							FieldsType: "FieldsV1",
+							FieldsV1: &metav1.FieldsV1{
+								Raw: []byte(`{"f:metadata": {"f:labels": {".": {},"f:kubernetes.io/metadata.name": {}}}}`)},
+							Manager:   "openshift-apiserver",
+							Operation: "Update",
+						},
+						{APIVersion: "v1",
+							FieldsType: "FieldsV1",
+							FieldsV1: &metav1.FieldsV1{
+								Raw: []byte(`{"f:metadata": {"f:labels": {"f:pod-security.kubernetes.io/enforce-version": {}}}}`)},
+							Manager:   "kubectl-edit",
+							Operation: "Update",
+						},
+					},
+				},
+			},
+			want: extractedNamespaces{
+				"kubectl-edit":              sets.New("pod-security.kubernetes.io/enforce-version"),
+				"cluster-policy-controller": sets.New[string](),
+				"openshift-apiserver":       sets.New(".", "kubernetes.io/metadata.name"),
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := extractNSFieldsPerManager(tt.ns)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("extractNSFieldsPerManager() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("extractNSFieldsPerManager() = %v, want %v", got, tt.want)
+			}
+		})
+	}
 }
