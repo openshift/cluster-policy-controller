@@ -478,26 +478,24 @@ func isNSControlled(ns *corev1.Namespace) bool {
 		return false
 	}
 
-	var labelsOwned, owningAtLeastOneLabel bool
+	var owningAtLeastOneLabel bool
 	for _, labelName := range []string{
 		psapi.EnforceLevelLabel, psapi.EnforceVersionLabel,
 		psapi.WarnLevelLabel, psapi.WarnVersionLabel,
 		psapi.AuditLevelLabel, psapi.AuditVersionLabel,
 	} {
 		if _, ok := ns.Labels[labelName]; ok {
-			if manager := extractedPerManager.getManagerForLabel(labelName); len(manager) > 0 && !(manager == "cluster-policy-controller" || manager == controllerName) {
-				labelsOwned = true
+			manager := extractedPerManager.getManagerForLabel(labelName)
+			if len(manager) > 0 && manager != "cluster-policy-controller" && manager != controllerName {
 				continue
 			}
-			labelsOwned = true
-			owningAtLeastOneLabel = true
-		} else {
-			// a label that is not set is owned by us
-			owningAtLeastOneLabel = true
 		}
+		// a label is either not set or is directly owned by us
+		owningAtLeastOneLabel = true
+
 	}
 
-	if labelsOwned && !owningAtLeastOneLabel {
+	if !owningAtLeastOneLabel {
 		return false
 	}
 
@@ -517,8 +515,13 @@ func controlledNamespacesLabelSelector() (labels.Selector, error) {
 
 // extractedNamespaces serves as a cache so that we don't have to re-extract the namespaces
 // for each label. It helps us prevent performance overhead from multiple deserializations.
+//
+// Maps a set of managed metadata.labels to their manager name.
 type extractedNamespaces map[string]sets.Set[string]
 
+// extractNSFieldsPerManager parses all the FieldsV1 in a Namespace `ns`,
+// extracts the information about label ownership and returns a structure that
+// maps all these labels in a set to their manager
 func extractNSFieldsPerManager(ns *corev1.Namespace) (extractedNamespaces, error) {
 	ret := extractedNamespaces{}
 	for _, fieldEntry := range ns.ManagedFields {
@@ -544,6 +547,8 @@ func (n extractedNamespaces) getManagerForLabel(labelName string) string {
 	return ""
 }
 
+// managedLabels extract the metadata.labels from the JSON in the managedEntry.FieldsV1
+// that describes the object's field ownership
 func managedLabels(fieldsEntry metav1.ManagedFieldsEntry) (sets.Set[string], error) {
 	managedUnstructured := map[string]interface{}{}
 	err := json.Unmarshal(fieldsEntry.FieldsV1.Raw, &managedUnstructured)
