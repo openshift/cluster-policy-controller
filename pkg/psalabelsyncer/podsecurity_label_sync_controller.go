@@ -40,8 +40,10 @@ const (
 )
 
 var (
-	enforcementLabels = map[string]string{
+	allPSaLabels = map[string]string{
 		psapi.EnforceLevelLabel: psapi.EnforceVersionLabel,
+		psapi.WarnLevelLabel:    psapi.WarnVersionLabel,
+		psapi.AuditLevelLabel:   psapi.AuditVersionLabel,
 	}
 	loggingLabels = map[string]string{
 		psapi.WarnLevelLabel:  psapi.WarnVersionLabel,
@@ -54,7 +56,7 @@ var (
 // admission namespace label to match the user account privileges in terms of being able
 // to use SCCs
 type PodSecurityAdmissionLabelSynchronizationController struct {
-	shouldEnforce bool
+	syncedLabels map[string]string
 
 	namespaceClient corev1client.NamespaceInterface
 
@@ -77,7 +79,7 @@ func NewEnforcingPodSecurityAdmissionLabelSynchronizationController(
 	eventRecorder events.Recorder,
 ) (factory.Controller, error) {
 	return newPodSecurityAdmissionLabelSynchronizationController(
-		true,
+		allPSaLabels,
 		namespaceClient,
 		namespaceInformer,
 		rbacInformers,
@@ -96,7 +98,7 @@ func NewAdvisingPodSecurityAdmissionLabelSynchronizationController(
 	eventRecorder events.Recorder,
 ) (factory.Controller, error) {
 	return newPodSecurityAdmissionLabelSynchronizationController(
-		false,
+		loggingLabels,
 		namespaceClient,
 		namespaceInformer,
 		rbacInformers,
@@ -107,7 +109,7 @@ func NewAdvisingPodSecurityAdmissionLabelSynchronizationController(
 }
 
 func newPodSecurityAdmissionLabelSynchronizationController(
-	shouldEnforce bool,
+	syncedLabels map[string]string,
 	namespaceClient corev1client.NamespaceInterface,
 	namespaceInformer corev1informers.NamespaceInformer,
 	rbacInformers rbacv1informers.Interface,
@@ -136,7 +138,7 @@ func newPodSecurityAdmissionLabelSynchronizationController(
 
 	syncCtx := factory.NewSyncContext(controllerName, eventRecorder.WithComponentSuffix(controllerName))
 	c := &PodSecurityAdmissionLabelSynchronizationController{
-		shouldEnforce: shouldEnforce,
+		syncedLabels: syncedLabels,
 
 		namespaceClient: namespaceClient,
 
@@ -237,14 +239,12 @@ func forceHistoricalLabelsOwnership(ctx context.Context, nsClient corev1client.N
 
 	cpcOwnedPSaLabels := map[string]string{}
 	// filter out all the labels not owned by this controller
-	for _, labelMap := range []map[string]string{enforcementLabels, loggingLabels} {
-		for labelType, labelVersion := range labelMap {
-			if cpcOwnedLabelKeys.Has(labelType) {
-				cpcOwnedPSaLabels[labelType] = ns.Labels[labelType]
-			}
-			if cpcOwnedLabelKeys.Has(labelVersion) {
-				cpcOwnedPSaLabels[labelVersion] = ns.Labels[labelVersion]
-			}
+	for labelType, labelVersion := range allPSaLabels {
+		if cpcOwnedLabelKeys.Has(labelType) {
+			cpcOwnedPSaLabels[labelType] = ns.Labels[labelType]
+		}
+		if cpcOwnedLabelKeys.Has(labelVersion) {
+			cpcOwnedPSaLabels[labelVersion] = ns.Labels[labelVersion]
 		}
 	}
 
@@ -339,36 +339,45 @@ func (c *PodSecurityAdmissionLabelSynchronizationController) syncNamespace(ctx c
 	if err != nil {
 		return fmt.Errorf("ns extraction failed: %w", err)
 	}
-	syncedLabels := enforcementLabels
-	if !c.shouldEnforce {
-		syncedLabels = loggingLabels
+
+	// we must extract the NS in case only some of the labels we're setting need
+	// updating to avoid hotlo
+	nsApplyConfig := corev1apply.Namespace(ns.Name)
+	if err != nil {
+		return fmt.Errorf("failed to extract field ownership for NS %q: %w", ns.Name, err)
 	}
 
-	nsApplyConfig := corev1apply.Namespace(ns.Name)
-	for typeLabel, versionLabel := range syncedLabels {
-		if ns.Labels[typeLabel] != string(psaLevel) || ns.Labels[versionLabel] != currentPSaVersion {
+	var shouldUpdate bool
+	for typeLabel, versionLabel := range c.syncedLabels {
+		if manager := managedNamespaces.getManagerForLabel(typeLabel); len(manager) == 0 || manager == controllerName {
 			nsApplyConfig.WithLabels(map[string]string{
-				typeLabel:    string(psaLevel),
+				typeLabel: string(psaLevel),
+			})
+			if ns.Labels[typeLabel] != string(psaLevel) {
+				shouldUpdate = true
+			}
+		}
+		if manager := managedNamespaces.getManagerForLabel(versionLabel); len(manager) == 0 || manager == controllerName {
+			nsApplyConfig.WithLabels(map[string]string{
 				versionLabel: currentPSaVersion,
 			})
-		}
-	}
-
-	for labelKey := range nsApplyConfig.Labels {
-		if manager := managedNamespaces.getManagerForLabel(labelKey); len(manager) > 0 && manager != controllerName {
-			delete(nsApplyConfig.Labels, labelKey)
-		}
-	}
-
-	if len(nsApplyConfig.Labels) > 0 {
-		_, err := c.namespaceClient.Apply(ctx, nsApplyConfig, metav1.ApplyOptions{FieldManager: controllerName})
-		if err != nil {
-			if apierrors.IsConflict(err) {
-				klog.V(4).Info("someone else is already managing the PSa labels: %v", err)
-				return nil
+			if ns.Labels[versionLabel] != currentPSaVersion {
+				shouldUpdate = true
 			}
-			return fmt.Errorf("failed to update the namespace: %w", err)
 		}
+	}
+
+	if !shouldUpdate {
+		return nil
+	}
+
+	_, err = c.namespaceClient.Apply(ctx, nsApplyConfig, metav1.ApplyOptions{FieldManager: controllerName})
+	if err != nil {
+		if apierrors.IsConflict(err) {
+			klog.Warning("someone else is already managing the PSa labels: %v", err)
+			return nil
+		}
+		return fmt.Errorf("failed to update the namespace: %w", err)
 	}
 
 	return nil

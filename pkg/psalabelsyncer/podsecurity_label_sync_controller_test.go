@@ -472,7 +472,7 @@ func TestEnforcingPodSecurityAdmissionLabelSynchronizationController_sync(t *tes
 			}
 
 			c := &PodSecurityAdmissionLabelSynchronizationController{
-				shouldEnforce: true,
+				syncedLabels: allPSaLabels,
 
 				namespaceClient: nsClient.CoreV1().Namespaces(),
 
@@ -524,8 +524,8 @@ func TestEnforcingPodSecurityAdmissionLabelSynchronizationController_sync(t *tes
 
 			if nsModified != nil && len(tt.expectedPSaLevel) > 0 {
 				require.Equal(t, tt.expectedPSaLevel, nsModified.Labels[psapi.EnforceLevelLabel], "unexpected PSa enforcement level")
-				require.Equal(t, "", nsModified.Labels[psapi.WarnLevelLabel], "unexpected PSa warn level")
-				require.Equal(t, "", nsModified.Labels[psapi.AuditLevelLabel], "unexpected PSa audit level")
+				require.Equal(t, tt.expectedPSaLevel, nsModified.Labels[psapi.WarnLevelLabel], "unexpected PSa warn level")
+				require.Equal(t, tt.expectedPSaLevel, nsModified.Labels[psapi.AuditLevelLabel], "unexpected PSa audit level")
 			}
 		})
 	}
@@ -633,6 +633,8 @@ func TestPodSecurityAdmissionLabelSynchronizationController_sync(t *testing.T) {
 			}
 
 			c := &PodSecurityAdmissionLabelSynchronizationController{
+				syncedLabels: loggingLabels,
+
 				namespaceClient: nsClient.CoreV1().Namespaces(),
 
 				namespaceLister:      nsLister,
