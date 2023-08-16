@@ -3,42 +3,45 @@ package psalabelsyncer
 import (
 	"context"
 	"fmt"
+	"reflect"
+	"strings"
 	"testing"
 	"time"
-
-	"github.com/stretchr/testify/require"
-
-	corev1 "k8s.io/api/core/v1"
-	rbacv1 "k8s.io/api/rbac/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/util/sets"
-	"k8s.io/apimachinery/pkg/watch"
-	rbacv1informers "k8s.io/client-go/informers/rbac/v1"
-	fake "k8s.io/client-go/kubernetes/fake"
-	corev1listers "k8s.io/client-go/listers/core/v1"
-	"k8s.io/client-go/tools/cache"
-	"k8s.io/client-go/util/workqueue"
-	psapi "k8s.io/pod-security-admission/api"
 
 	securityv1 "github.com/openshift/api/security/v1"
 	securityv1informers "github.com/openshift/client-go/security/informers/externalversions/security/v1"
 	securityv1listers "github.com/openshift/client-go/security/listers/security/v1"
 	"github.com/openshift/library-go/pkg/controller/factory"
 	"github.com/openshift/library-go/pkg/operator/events"
+	"github.com/stretchr/testify/require"
+	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/util/sets"
+	"k8s.io/apimachinery/pkg/util/wait"
+	"k8s.io/apimachinery/pkg/watch"
+	corev1informers "k8s.io/client-go/informers/core/v1"
+	rbacv1informers "k8s.io/client-go/informers/rbac/v1"
+	fake "k8s.io/client-go/kubernetes/fake"
+	corev1listers "k8s.io/client-go/listers/core/v1"
+	"k8s.io/client-go/tools/cache"
+	"k8s.io/client-go/util/workqueue"
+	psapi "k8s.io/pod-security-admission/api"
 )
 
-var (
-	testNamespaces = []*corev1.Namespace{
+func testNamespaces() []*corev1.Namespace {
+	return []*corev1.Namespace{
 		{ObjectMeta: metav1.ObjectMeta{Name: "controlled-namespace", Labels: map[string]string{"security.openshift.io/scc.podSecurityLabelSync": "true"}, Annotations: map[string]string{securityv1.UIDRangeAnnotation: "1000/1052"}}},
 		{ObjectMeta: metav1.ObjectMeta{Name: "controlled-namespace-too", Annotations: map[string]string{securityv1.UIDRangeAnnotation: "1000/1050"}}},
 		{ObjectMeta: metav1.ObjectMeta{Name: "controlled-namespace-terminating", Annotations: map[string]string{securityv1.UIDRangeAnnotation: "1000/1052"}}, Status: corev1.NamespaceStatus{Phase: corev1.NamespaceTerminating}},
 		{ObjectMeta: metav1.ObjectMeta{Name: "controlled-namespace-without-uid-annotation"}},
 		{ObjectMeta: metav1.ObjectMeta{Name: "controlled-namespace-previous-enforce-labels", Annotations: map[string]string{securityv1.UIDRangeAnnotation: "1000/1052"}, Labels: map[string]string{psapi.EnforceLevelLabel: "bogus value", psapi.EnforceVersionLabel: "bogus version value"}}},
-		{ObjectMeta: metav1.ObjectMeta{Name: "controlled-namespace-previous-warn-labels", Annotations: map[string]string{securityv1.UIDRangeAnnotation: "1000/1052"}, Labels: map[string]string{psapi.WarnLevelLabel: "bogus value", psapi.WarnVersionLabel: "bogus version value"}}},
+		{ObjectMeta: metav1.ObjectMeta{Name: "controlled-namespace-previous-enforce-version-different-owner", Annotations: map[string]string{securityv1.UIDRangeAnnotation: "1000/1052"}, Labels: map[string]string{psapi.EnforceVersionLabel: "bogus version value"}, ManagedFields: managedLabelsFields("someone-else", psapi.EnforceVersionLabel)}},
+		{ObjectMeta: metav1.ObjectMeta{Name: "controlled-namespace-previous-warn-labels", Annotations: map[string]string{securityv1.UIDRangeAnnotation: "1000/1052"}, Labels: map[string]string{psapi.WarnLevelLabel: "bogus value", psapi.WarnVersionLabel: "bogus version value"}, ManagedFields: managedLabelsFields("cluster-policy-controller", psapi.WarnLevelLabel, psapi.WarnVersionLabel)}},
 		{ObjectMeta: metav1.ObjectMeta{Name: "non-controlled-namespace", Labels: map[string]string{"security.openshift.io/scc.podSecurityLabelSync": "false"}, Annotations: map[string]string{securityv1.UIDRangeAnnotation: "1000/1052"}}},
 	}
-)
+}
 
 func syncSCCLister(t *testing.T) securityv1listers.SecurityContextConstraintsLister {
 	pBool := func(b bool) *bool {
@@ -115,6 +118,48 @@ func TestPodSecurityAdmissionLabelSynchronizationController_isNSControlled(t *te
 		{ObjectMeta: metav1.ObjectMeta{Name: "tested-ns", Labels: map[string]string{"security.openshift.io/scc.podSecurityLabelSync": "false"}}},
 		{ObjectMeta: metav1.ObjectMeta{Name: "willing-tested-ns", Labels: map[string]string{"security.openshift.io/scc.podSecurityLabelSync": "true"}}},
 		{ObjectMeta: metav1.ObjectMeta{Name: "nihilistic-tested-ns"}},
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:          "nihilistic-tested-ns-with-foreign-managed-labels",
+				Labels:        map[string]string{psapi.EnforceLevelLabel: "restricted", psapi.EnforceVersionLabel: "latest", psapi.WarnLevelLabel: "restricted", psapi.WarnVersionLabel: "latest", psapi.AuditLevelLabel: "restricted", psapi.AuditVersionLabel: "latest"},
+				ManagedFields: managedLabelsFields("completely-different-controller", psapi.EnforceLevelLabel, psapi.EnforceVersionLabel, psapi.WarnLevelLabel, psapi.WarnVersionLabel, psapi.AuditLevelLabel, psapi.AuditVersionLabel),
+			},
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:          "willing-tested-ns-with-foreign-managed-labels",
+				Labels:        map[string]string{psapi.EnforceLevelLabel: "restricted", "security.openshift.io/scc.podSecurityLabelSync": "true"},
+				ManagedFields: managedLabelsFields("completely-different-controller", psapi.EnforceLevelLabel),
+			},
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:          "nihilistic-tested-ns-with-our-managed-labels",
+				Labels:        map[string]string{psapi.EnforceLevelLabel: "restricted"},
+				ManagedFields: managedLabelsFields("cluster-policy-controller", psapi.EnforceLevelLabel),
+			},
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:          "tested-ns-with-our-managed-labels",
+				Labels:        map[string]string{psapi.EnforceLevelLabel: "restricted", "security.openshift.io/scc.podSecurityLabelSync": "false"},
+				ManagedFields: managedLabelsFields("cluster-policy-controller", psapi.EnforceLevelLabel),
+			},
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:          "nihilistic-tested-ns-with-some-other-managed-labels",
+				Labels:        map[string]string{psapi.EnforceLevelLabel: "restricted"},
+				ManagedFields: managedLabelsFields("completely-different-controller", "some-random-label"),
+			},
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:          "nihilistic-tested-ns-with-foreign-version-managed-label",
+				Labels:        map[string]string{psapi.EnforceVersionLabel: "latest"},
+				ManagedFields: managedLabelsFields("completely-different-controller", psapi.EnforceVersionLabel),
+			},
+		},
 	} {
 		require.NoError(t, namespaces.Add(ns))
 	}
@@ -181,6 +226,42 @@ func TestPodSecurityAdmissionLabelSynchronizationController_isNSControlled(t *te
 			want:    true,
 			wantErr: false,
 		},
+		{
+			name:    "NS that does not care but has PSa labels already managed by someone else",
+			nsName:  "nihilistic-tested-ns-with-foreign-managed-labels",
+			want:    false,
+			wantErr: false,
+		},
+		{
+			name:    "NS that wants to be synced even though someone else already manages the labels",
+			nsName:  "willing-tested-ns-with-foreign-managed-labels",
+			want:    true,
+			wantErr: false,
+		},
+		{
+			name:    "NS that does not care and has PSa labels already managed by us",
+			nsName:  "nihilistic-tested-ns-with-our-managed-labels",
+			want:    true,
+			wantErr: false,
+		},
+		{
+			name:    "NS that does not want to be synced but has labels managed by us",
+			nsName:  "tested-ns-with-our-managed-labels",
+			want:    false,
+			wantErr: false,
+		},
+		{
+			name:    "NS that does not care and has some labels managed by someone else",
+			nsName:  "nihilistic-tested-ns-with-some-other-managed-labels",
+			want:    true,
+			wantErr: false,
+		},
+		{
+			name:    "NS that does not care and has some of PSa labels managed by someone else",
+			nsName:  "nihilistic-tested-ns-with-foreign-version-managed-label",
+			want:    true,
+			wantErr: false,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -202,10 +283,11 @@ func TestPodSecurityAdmissionLabelSynchronizationController_isNSControlled(t *te
 func TestPodSecurityAdmissionLabelSynchronizationController_saToSCCCAcheEnqueueFunc(t *testing.T) {
 	namespaces := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{})
 
+	testNamespaces := testNamespaces()
 	controlledNSLen := len(testNamespaces) - 1
 
 	for _, ns := range testNamespaces {
-		ns := ns
+		ns := ns.DeepCopy()
 		require.NoError(t, namespaces.Add(ns))
 	}
 	nsLister := corev1listers.NewNamespaceLister(namespaces)
@@ -272,25 +354,18 @@ func TestEnforcingPodSecurityAdmissionLabelSynchronizationController_sync(t *tes
 	labelSelector, err := controlledNamespacesLabelSelector()
 	require.NoError(t, err)
 
-	nsObjectSlice := []runtime.Object{}
-	nsIndexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{})
-	for _, ns := range testNamespaces {
-		require.NoError(t, nsIndexer.Add(ns))
-		nsObjectSlice = append(nsObjectSlice, ns)
-	}
-
-	nsClient := fake.NewSimpleClientset(nsObjectSlice...)
-	nsLister := corev1listers.NewNamespaceLister(nsIndexer)
-
 	mockCache := &mockSAToSCCCache{
 		mockCache: map[string]sets.String{
-			"controlled-namespace/testspecificsa":                          sets.NewString("scc_restricted", "scc_baseline"),
-			"controlled-namespace/testspecificsa2":                         sets.NewString("scc_restricted", "scc_privileged"),
-			"controlled-namespace/testspecificsa3":                         sets.NewString("scc_restricted"),
-			"controlled-namespace-previous-enforce-labels/testspecificsa3": sets.NewString("scc_restricted"),
-			"controlled-namespace-previous-warn-labels/testspecificsa3":    sets.NewString("scc_restricted"),
+			"controlled-namespace/testspecificsa":                                           sets.NewString("scc_restricted", "scc_baseline"),
+			"controlled-namespace/testspecificsa2":                                          sets.NewString("scc_restricted", "scc_privileged"),
+			"controlled-namespace/testspecificsa3":                                          sets.NewString("scc_restricted"),
+			"controlled-namespace-previous-enforce-labels/testspecificsa3":                  sets.NewString("scc_restricted"),
+			"controlled-namespace-previous-warn-labels/testspecificsa3":                     sets.NewString("scc_restricted"),
+			"controlled-namespace-previous-enforce-version-different-owner/testspecificsa3": sets.NewString("scc_restricted"),
 		},
 	}
+
+	testNamespaces := testNamespaces()
 
 	tests := []struct {
 		name             string
@@ -370,10 +445,10 @@ func TestEnforcingPodSecurityAdmissionLabelSynchronizationController_sync(t *tes
 			expectedPSaLevel: "restricted",
 		},
 		{
-			name:   "SA with restricted SCC assigned in am NS with previous warn labels",
-			nsName: "controlled-namespace-previous-warn-labels",
+			name:   "SA with restricted SCC, NS with previous enforce version managed by someone else",
+			nsName: "controlled-namespace-previous-enforce-version-different-owner",
 			serviceAccounts: []*corev1.ServiceAccount{
-				{ObjectMeta: metav1.ObjectMeta{Name: "testspecificsa3", Namespace: "controlled-namespace-previous-warn-labels"}},
+				{ObjectMeta: metav1.ObjectMeta{Name: "testspecificsa3", Namespace: "controlled-namespace-previous-enforce-version-different-owner"}},
 			},
 			wantErr:          false,
 			expectNSUpdate:   true,
@@ -382,7 +457,22 @@ func TestEnforcingPodSecurityAdmissionLabelSynchronizationController_sync(t *tes
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			testCtx := context.Background()
+			testCtx, testCancel := context.WithCancel(context.Background())
+			defer testCancel()
+
+			nsObjectSlice := []runtime.Object{}
+			nsIndexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{})
+			for _, ns := range testNamespaces {
+				require.NoError(t, nsIndexer.Add(ns))
+				nsObjectSlice = append(nsObjectSlice, ns)
+			}
+
+			nsClient := fake.NewSimpleClientset(nsObjectSlice...)
+			nsInformer := corev1informers.NewNamespaceInformer(nsClient, 100*time.Second, cache.Indexers{})
+			go nsInformer.Run(testCtx.Done())
+
+			require.True(t, cache.WaitForCacheSync(testCtx.Done(), nsInformer.HasSynced))
+			nsLister := corev1listers.NewNamespaceLister(nsInformer.GetIndexer())
 
 			saIndexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{
 				cache.NamespaceIndex: cache.MetaNamespaceIndexFunc,
@@ -392,7 +482,7 @@ func TestEnforcingPodSecurityAdmissionLabelSynchronizationController_sync(t *tes
 			}
 
 			c := &PodSecurityAdmissionLabelSynchronizationController{
-				shouldEnforce: true,
+				syncedLabels: allPSaLabels,
 
 				namespaceClient: nsClient.CoreV1().Namespaces(),
 
@@ -410,6 +500,7 @@ func TestEnforcingPodSecurityAdmissionLabelSynchronizationController_sync(t *tes
 				defer nsWatcher.Stop()
 			}
 			var nsModified *corev1.Namespace
+			var nsModifiedEvents int
 			finished := make(chan bool)
 			timedCtx, timedCtxCancel := context.WithTimeout(context.Background(), 1500*time.Second)
 			go func() {
@@ -420,6 +511,7 @@ func TestEnforcingPodSecurityAdmissionLabelSynchronizationController_sync(t *tes
 						ns, ok := nsEvent.Object.(*corev1.Namespace)
 						require.True(t, ok)
 						if ns.Name == tt.nsName && nsEvent.Type == watch.Modified {
+							nsModifiedEvents++
 							nsModified = ns
 						}
 						// check nsEvent.Type is watch.Modified
@@ -431,21 +523,29 @@ func TestEnforcingPodSecurityAdmissionLabelSynchronizationController_sync(t *tes
 			}()
 
 			go func() {
-				if err := c.sync(testCtx, &mockedSyncContext{key: tt.nsName}); (err != nil) != tt.wantErr {
-					t.Errorf("PodSecurityAdmissionLabelSynchronizationController.sync() error = %v, wantErr %v", err, tt.wantErr)
-				}
+				rerunCtx, cancel := context.WithTimeout(testCtx, 1*time.Second)
+				defer cancel()
+				wait.UntilWithContext(rerunCtx, func(ctx context.Context) {
+					if err := c.sync(ctx, &mockedSyncContext{key: tt.nsName}); (err != nil) != tt.wantErr {
+						t.Errorf("PodSecurityAdmissionLabelSynchronizationController.sync() error = %v, wantErr %v", err, tt.wantErr)
+					}
+				}, 100*time.Millisecond)
 
-				time.Sleep(1 * time.Second)
 				timedCtxCancel()
 			}()
 
 			<-finished
-			require.Equal(t, tt.expectNSUpdate, (nsModified != nil), "expected NS update to be %v, but it was %v", tt.expectNSUpdate, nsModified)
+
+			expectedEvents := 0
+			if tt.expectNSUpdate {
+				expectedEvents = 1
+			}
+			require.Equal(t, expectedEvents, nsModifiedEvents, "expected NS update to be %v, but it was %v", tt.expectNSUpdate, nsModifiedEvents)
 
 			if nsModified != nil && len(tt.expectedPSaLevel) > 0 {
 				require.Equal(t, tt.expectedPSaLevel, nsModified.Labels[psapi.EnforceLevelLabel], "unexpected PSa enforcement level")
-				require.Equal(t, "", nsModified.Labels[psapi.WarnLevelLabel], "unexpected PSa warn level")
-				require.Equal(t, "", nsModified.Labels[psapi.AuditLevelLabel], "unexpected PSa audit level")
+				require.Equal(t, tt.expectedPSaLevel, nsModified.Labels[psapi.WarnLevelLabel], "unexpected PSa warn level")
+				require.Equal(t, tt.expectedPSaLevel, nsModified.Labels[psapi.AuditLevelLabel], "unexpected PSa audit level")
 			}
 		})
 	}
@@ -455,16 +555,6 @@ func TestPodSecurityAdmissionLabelSynchronizationController_sync(t *testing.T) {
 	labelSelector, err := controlledNamespacesLabelSelector()
 	require.NoError(t, err)
 
-	nsObjectSlice := []runtime.Object{}
-	nsIndexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{})
-	for _, ns := range testNamespaces {
-		require.NoError(t, nsIndexer.Add(ns))
-		nsObjectSlice = append(nsObjectSlice, ns)
-	}
-
-	nsClient := fake.NewSimpleClientset(nsObjectSlice...)
-	nsLister := corev1listers.NewNamespaceLister(nsIndexer)
-
 	mockCache := &mockSAToSCCCache{
 		mockCache: map[string]sets.String{
 			"controlled-namespace/testspecificsa":  sets.NewString("scc_restricted", "scc_baseline"),
@@ -472,6 +562,8 @@ func TestPodSecurityAdmissionLabelSynchronizationController_sync(t *testing.T) {
 			"controlled-namespace/testspecificsa3": sets.NewString("scc_restricted"),
 		},
 	}
+
+	testNamespaces := testNamespaces()
 
 	tests := []struct {
 		name             string
@@ -545,6 +637,16 @@ func TestPodSecurityAdmissionLabelSynchronizationController_sync(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			testCtx := context.Background()
 
+			nsObjectSlice := []runtime.Object{}
+			nsIndexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{})
+			for _, ns := range testNamespaces {
+				require.NoError(t, nsIndexer.Add(ns))
+				nsObjectSlice = append(nsObjectSlice, ns)
+			}
+
+			nsClient := fake.NewSimpleClientset(nsObjectSlice...)
+			nsLister := corev1listers.NewNamespaceLister(nsIndexer)
+
 			saIndexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{
 				cache.NamespaceIndex: cache.MetaNamespaceIndexFunc,
 			})
@@ -553,6 +655,8 @@ func TestPodSecurityAdmissionLabelSynchronizationController_sync(t *testing.T) {
 			}
 
 			c := &PodSecurityAdmissionLabelSynchronizationController{
+				syncedLabels: loggingLabels,
+
 				namespaceClient: nsClient.CoreV1().Namespaces(),
 
 				namespaceLister:      nsLister,
@@ -590,11 +694,14 @@ func TestPodSecurityAdmissionLabelSynchronizationController_sync(t *testing.T) {
 			}()
 
 			go func() {
-				if err := c.sync(testCtx, &mockedSyncContext{key: tt.nsName}); (err != nil) != tt.wantErr {
-					t.Errorf("PodSecurityAdmissionLabelSynchronizationController.sync() error = %v, wantErr %v", err, tt.wantErr)
-				}
+				rerunCtx, cancel := context.WithTimeout(testCtx, 1*time.Second)
+				defer cancel()
+				wait.UntilWithContext(rerunCtx, func(ctx context.Context) {
+					if err := c.sync(testCtx, &mockedSyncContext{key: tt.nsName}); (err != nil) != tt.wantErr {
+						t.Errorf("PodSecurityAdmissionLabelSynchronizationController.sync() error = %v, wantErr %v", err, tt.wantErr)
+					}
+				}, 100*time.Millisecond)
 
-				time.Sleep(1 * time.Second)
 				timedCtxCancel()
 			}()
 
@@ -644,4 +751,92 @@ func (c *mockedSyncContext) QueueKey() string {
 
 func (c *mockedSyncContext) Recorder() events.Recorder {
 	return nil
+}
+
+func managedLabelsFields(manager string, labelKeys ...string) []metav1.ManagedFieldsEntry {
+	if len(labelKeys) == 0 {
+		return []metav1.ManagedFieldsEntry{}
+	}
+
+	rawVals := []string{}
+	for _, labelKey := range labelKeys {
+		rawVals = append(rawVals, fmt.Sprintf(`"f:%s": {}`, labelKey))
+	}
+	fieldsRaw := []byte(`{"f:metadata":{"f:labels":{` + strings.Join(rawVals, ",") + "}}}")
+
+	return []metav1.ManagedFieldsEntry{
+		{
+			FieldsV1:  &metav1.FieldsV1{Raw: fieldsRaw},
+			Manager:   manager,
+			Operation: metav1.ManagedFieldsOperationApply,
+		},
+	}
+
+}
+
+func Test_extractNSFieldsPerManager(t *testing.T) {
+	tests := []struct {
+		name    string
+		ns      *corev1.Namespace
+		want    extractedNamespaces
+		wantErr bool
+	}{
+		{
+			name: "some test",
+			ns: &corev1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "pokus",
+					Annotations: map[string]string{
+						"openshift.io/sa.scc.mcs":                 "s0:c26,c15",
+						"openshift.io/sa.scc.supplemental-groups": "1000680000 / 10000",
+						"openshift.io/sa.scc.uid-range":           "1000680000 / 10000",
+					}, Labels: map[string]string{
+						"kubernetes.io/metadata.name":                "pokus",
+						"pod-security.kubernetes.io/enforce-version": "latest",
+					},
+					ManagedFields: []metav1.ManagedFieldsEntry{
+						{
+							APIVersion: "v1",
+							FieldsType: "FieldsV1",
+							FieldsV1: &metav1.FieldsV1{
+								Raw: []byte(`{"f:metadata": {"f:annotations": {"f:openshift.io/sa.scc.mcs": {},"f:openshift.io/sa.scc.supplemental-groups": {},"f:openshift.io/sa.scc.uid-range": {}}}}`)},
+							Manager:   "cluster-policy-controller",
+							Operation: "Update",
+						},
+						{APIVersion: "v1",
+							FieldsType: "FieldsV1",
+							FieldsV1: &metav1.FieldsV1{
+								Raw: []byte(`{"f:metadata": {"f:labels": {".": {},"f:kubernetes.io/metadata.name": {}}}}`)},
+							Manager:   "openshift-apiserver",
+							Operation: "Update",
+						},
+						{APIVersion: "v1",
+							FieldsType: "FieldsV1",
+							FieldsV1: &metav1.FieldsV1{
+								Raw: []byte(`{"f:metadata": {"f:labels": {"f:pod-security.kubernetes.io/enforce-version": {}}}}`)},
+							Manager:   "kubectl-edit",
+							Operation: "Update",
+						},
+					},
+				},
+			},
+			want: extractedNamespaces{
+				"kubectl-edit":              sets.New("pod-security.kubernetes.io/enforce-version"),
+				"cluster-policy-controller": sets.New[string](),
+				"openshift-apiserver":       sets.New(".", "kubernetes.io/metadata.name"),
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := extractNSFieldsPerManager(tt.ns)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("extractNSFieldsPerManager() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("extractNSFieldsPerManager() = %v, want %v", got, tt.want)
+			}
+		})
+	}
 }
