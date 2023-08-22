@@ -40,6 +40,49 @@ func testNamespaces() []*corev1.Namespace {
 		{ObjectMeta: metav1.ObjectMeta{Name: "controlled-namespace-previous-enforce-version-different-owner", Annotations: map[string]string{securityv1.UIDRangeAnnotation: "1000/1052"}, Labels: map[string]string{psapi.EnforceVersionLabel: "bogus version value"}, ManagedFields: managedLabelsFields("someone-else", psapi.EnforceVersionLabel)}},
 		{ObjectMeta: metav1.ObjectMeta{Name: "controlled-namespace-previous-warn-labels", Annotations: map[string]string{securityv1.UIDRangeAnnotation: "1000/1052"}, Labels: map[string]string{psapi.WarnLevelLabel: "bogus value", psapi.WarnVersionLabel: "bogus version value"}, ManagedFields: managedLabelsFields("cluster-policy-controller", psapi.WarnLevelLabel, psapi.WarnVersionLabel)}},
 		{ObjectMeta: metav1.ObjectMeta{Name: "non-controlled-namespace", Labels: map[string]string{"security.openshift.io/scc.podSecurityLabelSync": "false"}, Annotations: map[string]string{securityv1.UIDRangeAnnotation: "1000/1052"}}},
+		{ObjectMeta: metav1.ObjectMeta{
+			Name:        "controlled-namespace-different-owner-and-sync-label-true",
+			Annotations: map[string]string{securityv1.UIDRangeAnnotation: "1000/1052"},
+			Labels: map[string]string{
+				psapi.EnforceLevelLabel:                          "bogus enforce level value",
+				psapi.EnforceVersionLabel:                        "bogus enforce version value",
+				"security.openshift.io/scc.podSecurityLabelSync": "true",
+			},
+			ManagedFields: managedLabelsFields("someone-else",
+				psapi.EnforceLevelLabel,
+				psapi.EnforceVersionLabel,
+			),
+		}},
+		{ObjectMeta: metav1.ObjectMeta{
+			Name:        "non-controlled-namespace-different-owner-and-sync-label-false",
+			Annotations: map[string]string{securityv1.UIDRangeAnnotation: "1000/1052"},
+			Labels: map[string]string{
+				psapi.EnforceLevelLabel:                          "bogus enforce level value",
+				psapi.EnforceVersionLabel:                        "bogus enforce version value",
+				"security.openshift.io/scc.podSecurityLabelSync": "false",
+			},
+			ManagedFields: managedLabelsFields("someone-else",
+				psapi.EnforceLevelLabel,
+				psapi.EnforceVersionLabel,
+			),
+		}},
+		{ObjectMeta: metav1.ObjectMeta{
+			Name:        "controlled-namespace-different-owner-and-sync-label-unset",
+			Annotations: map[string]string{securityv1.UIDRangeAnnotation: "1000/1052"},
+			Labels: map[string]string{
+				psapi.EnforceLevelLabel: "privileged",
+				psapi.AuditLevelLabel:   "privileged",
+				psapi.WarnLevelLabel:    "privileged",
+			},
+			ManagedFields: managedLabelsFields("someone-else",
+				psapi.EnforceLevelLabel,
+				psapi.EnforceVersionLabel,
+				psapi.AuditLevelLabel,
+				psapi.AuditVersionLabel,
+				psapi.WarnLevelLabel,
+				psapi.WarnVersionLabel,
+			),
+		}},
 	}
 }
 
@@ -284,7 +327,7 @@ func TestPodSecurityAdmissionLabelSynchronizationController_saToSCCCAcheEnqueueF
 	namespaces := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{})
 
 	testNamespaces := testNamespaces()
-	controlledNSLen := len(testNamespaces) - 1
+	controlledNSLen := len(testNamespaces) - 2
 
 	for _, ns := range testNamespaces {
 		ns := ns.DeepCopy()
@@ -362,18 +405,21 @@ func TestEnforcingPodSecurityAdmissionLabelSynchronizationController_sync(t *tes
 			"controlled-namespace-previous-enforce-labels/testspecificsa3":                  sets.NewString("scc_restricted"),
 			"controlled-namespace-previous-warn-labels/testspecificsa3":                     sets.NewString("scc_restricted"),
 			"controlled-namespace-previous-enforce-version-different-owner/testspecificsa3": sets.NewString("scc_restricted"),
+			"controlled-namespace-different-owner-and-sync-label-true/testspecificsa3":      sets.NewString("scc_restricted"),
+			"controlled-namespace-different-owner-and-sync-label-unset/testspecificsa3":     sets.NewString("scc_restricted"),
 		},
 	}
 
 	testNamespaces := testNamespaces()
 
 	tests := []struct {
-		name             string
-		serviceAccounts  []*corev1.ServiceAccount
-		nsName           string
-		wantErr          bool
-		expectNSUpdate   bool
-		expectedPSaLevel string
+		name               string
+		serviceAccounts    []*corev1.ServiceAccount
+		nsName             string
+		wantErr            bool
+		expectNSUpdate     bool
+		expectedPSaLevel   string
+		expectedPSaVersion string
 	}{
 		{
 			name:    "non-existent ns",
@@ -453,6 +499,33 @@ func TestEnforcingPodSecurityAdmissionLabelSynchronizationController_sync(t *tes
 			wantErr:          false,
 			expectNSUpdate:   true,
 			expectedPSaLevel: "restricted",
+		},
+		{
+			name:   "SA with restricted SCC, NS with previous enforce version managed by someone else but sync label set to true",
+			nsName: "controlled-namespace-different-owner-and-sync-label-true",
+			serviceAccounts: []*corev1.ServiceAccount{
+				{ObjectMeta: metav1.ObjectMeta{Name: "testspecificsa3", Namespace: "controlled-namespace-different-owner-and-sync-label-true"}},
+			},
+			wantErr:            false,
+			expectNSUpdate:     true,
+			expectedPSaLevel:   "restricted",
+			expectedPSaVersion: "v1.24",
+		},
+		{
+			name:           "SA with restricted SCC, NS with previous enforce version managed by someone else but sync label set to false",
+			nsName:         "non-controlled-namespace-different-owner-and-sync-label-false",
+			wantErr:        false,
+			expectNSUpdate: false,
+		},
+		{
+			name:   "SA with restricted SCC, NS with previous enforce version managed by someone else but sync label unset",
+			nsName: "controlled-namespace-different-owner-and-sync-label-unset",
+			serviceAccounts: []*corev1.ServiceAccount{
+				{ObjectMeta: metav1.ObjectMeta{Name: "testspecificsa3", Namespace: "controlled-namespace-different-owner-and-sync-label-unset"}},
+			},
+			wantErr:          false,
+			expectNSUpdate:   false,
+			expectedPSaLevel: "privileged",
 		},
 	}
 	for _, tt := range tests {
@@ -546,6 +619,11 @@ func TestEnforcingPodSecurityAdmissionLabelSynchronizationController_sync(t *tes
 				require.Equal(t, tt.expectedPSaLevel, nsModified.Labels[psapi.EnforceLevelLabel], "unexpected PSa enforcement level")
 				require.Equal(t, tt.expectedPSaLevel, nsModified.Labels[psapi.WarnLevelLabel], "unexpected PSa warn level")
 				require.Equal(t, tt.expectedPSaLevel, nsModified.Labels[psapi.AuditLevelLabel], "unexpected PSa audit level")
+			}
+			if nsModified != nil && len(tt.expectedPSaVersion) > 0 {
+				require.Equal(t, tt.expectedPSaVersion, nsModified.Labels[psapi.EnforceVersionLabel], "unexpected PSa enforcement version")
+				require.Equal(t, tt.expectedPSaVersion, nsModified.Labels[psapi.WarnVersionLabel], "unexpected PSa warn version")
+				require.Equal(t, tt.expectedPSaVersion, nsModified.Labels[psapi.AuditVersionLabel], "unexpected PSa audit version")
 			}
 		})
 	}

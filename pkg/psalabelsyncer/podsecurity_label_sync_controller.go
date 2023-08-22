@@ -348,8 +348,9 @@ func (c *PodSecurityAdmissionLabelSynchronizationController) syncNamespace(ctx c
 	}
 
 	var shouldUpdate bool
+	mustSync := ns.Labels[labelSyncControlLabel] == "true"
 	for typeLabel, versionLabel := range c.syncedLabels {
-		if manager := managedNamespaces.getManagerForLabel(typeLabel); len(manager) == 0 || manager == controllerName {
+		if manager := managedNamespaces.getManagerForLabel(typeLabel); len(manager) == 0 || manager == controllerName || mustSync {
 			nsApplyConfig.WithLabels(map[string]string{
 				typeLabel: string(psaLevel),
 			})
@@ -357,7 +358,7 @@ func (c *PodSecurityAdmissionLabelSynchronizationController) syncNamespace(ctx c
 				shouldUpdate = true
 			}
 		}
-		if manager := managedNamespaces.getManagerForLabel(versionLabel); len(manager) == 0 || manager == controllerName {
+		if manager := managedNamespaces.getManagerForLabel(versionLabel); len(manager) == 0 || manager == controllerName || mustSync {
 			nsApplyConfig.WithLabels(map[string]string{
 				versionLabel: currentPSaVersion,
 			})
@@ -371,7 +372,7 @@ func (c *PodSecurityAdmissionLabelSynchronizationController) syncNamespace(ctx c
 		return nil
 	}
 
-	_, err = c.namespaceClient.Apply(ctx, nsApplyConfig, metav1.ApplyOptions{FieldManager: controllerName})
+	_, err = c.namespaceClient.Apply(ctx, nsApplyConfig, metav1.ApplyOptions{FieldManager: controllerName, Force: mustSync})
 	if err != nil {
 		if apierrors.IsConflict(err) {
 			klog.Warning("someone else is already managing the PSa labels: %v", err)
