@@ -422,9 +422,8 @@ func TestEnforcingPodSecurityAdmissionLabelSynchronizationController_sync(t *tes
 		expectedPSaVersion string
 	}{
 		{
-			name:    "non-existent ns",
-			nsName:  "unknown",
-			wantErr: true,
+			name:   "non-existent ns",
+			nsName: "unknown",
 		},
 		{
 			name:   "terminating ns",
@@ -652,9 +651,8 @@ func TestPodSecurityAdmissionLabelSynchronizationController_sync(t *testing.T) {
 		expectedPSaLevel string
 	}{
 		{
-			name:    "non-existent ns",
-			nsName:  "unknown",
-			wantErr: true,
+			name:   "non-existent ns",
+			nsName: "unknown",
 		},
 		{
 			name:   "terminating ns",
