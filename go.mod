@@ -20,7 +20,7 @@ require (
 	k8s.io/component-base v0.28.2
 	k8s.io/controller-manager v0.28.2
 	k8s.io/klog/v2 v2.100.1
-	k8s.io/kubernetes v1.28.2
+	k8s.io/kubernetes v0.0.0-20230922081649-515b71a6e74d // TODO: revert back to 1.28.3 or later, release-1.28 branch was manually added to unblock CPC build (see https://github.com/kubernetes/kubernetes/pull/120795)
 	k8s.io/pod-security-admission v0.28.2
 )
 
