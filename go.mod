@@ -20,7 +20,7 @@ require (
 	k8s.io/component-base v0.28.2
 	k8s.io/controller-manager v0.28.2
 	k8s.io/klog/v2 v2.100.1
-	k8s.io/kubernetes v0.0.0-20230922081649-515b71a6e74d // TODO: revert back to 1.28.3 or later, release-1.28 branch was manually added to unblock CPC build (see https://github.com/kubernetes/kubernetes/pull/120795)
+	k8s.io/kubernetes v1.28.2
 	k8s.io/pod-security-admission v0.28.2
 )
 
@@ -91,13 +91,13 @@ require (
 	go.uber.org/atomic v1.10.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.19.0 // indirect
-	golang.org/x/crypto v0.13.0 // indirect
+	golang.org/x/crypto v0.14.0 // indirect
 	golang.org/x/exp v0.0.0-20220722155223-a9213eeb770e // indirect
-	golang.org/x/net v0.15.0 // indirect
+	golang.org/x/net v0.17.0 // indirect
 	golang.org/x/oauth2 v0.8.0 // indirect
 	golang.org/x/sync v0.2.0 // indirect
-	golang.org/x/sys v0.12.0 // indirect
-	golang.org/x/term v0.12.0 // indirect
+	golang.org/x/sys v0.13.0 // indirect
+	golang.org/x/term v0.13.0 // indirect
 	golang.org/x/text v0.13.0 // indirect
 	golang.org/x/time v0.3.0 // indirect
 	google.golang.org/appengine v1.6.7 // indirect
@@ -124,12 +124,13 @@ require (
 )
 
 replace (
-	k8s.io/api => k8s.io/api v0.28.2
-	k8s.io/apiextensions-apiserver => k8s.io/apiextensions-apiserver v0.28.2
-	k8s.io/apimachinery => k8s.io/apimachinery v0.28.2
-	k8s.io/apiserver => k8s.io/apiserver v0.28.2
-	k8s.io/cli-runtime => k8s.io/cli-runtime v0.28.2
-	k8s.io/client-go => k8s.io/client-go v0.28.2
+	// To address CVE-2023-44487 until k8s 1.28.3 release is out
+	k8s.io/api => k8s.io/kubernetes/staging/src/k8s.io/api v0.0.0-20231014014128-db4ac26123a3
+	k8s.io/apiextensions-apiserver => k8s.io/kubernetes/staging/src/k8s.io/apiextensions-apiserver v0.0.0-20231014014128-db4ac26123a3
+	k8s.io/apimachinery => k8s.io/kubernetes/staging/src/k8s.io/apimachinery v0.0.0-20231014014128-db4ac26123a3
+	k8s.io/apiserver => k8s.io/kubernetes/staging/src/k8s.io/apiserver v0.0.0-20231014014128-db4ac26123a3
+	k8s.io/cli-runtime => k8s.io/kubernetes/staging/src/k8s.io/cli-runtime v0.0.0-20231014014128-db4ac26123a3
+	k8s.io/client-go => k8s.io/kubernetes/staging/src/k8s.io/client-go v0.0.0-20231014014128-db4ac26123a3
 	k8s.io/cloud-provider => k8s.io/cloud-provider v0.28.2
 	k8s.io/cluster-bootstrap => k8s.io/cluster-bootstrap v0.28.2
 	k8s.io/code-generator => k8s.io/code-generator v0.28.2
@@ -144,6 +145,7 @@ replace (
 	k8s.io/kube-scheduler => k8s.io/kube-scheduler v0.28.2
 	k8s.io/kubectl => k8s.io/kubectl v0.28.2
 	k8s.io/kubelet => k8s.io/kubelet v0.28.2
+	k8s.io/kubernetes => k8s.io/kubernetes v0.0.0-20231014014128-db4ac26123a3
 	k8s.io/legacy-cloud-providers => k8s.io/legacy-cloud-providers v0.28.2
 	k8s.io/metrics => k8s.io/metrics v0.28.2
 	k8s.io/mount-utils => k8s.io/mount-utils v0.28.2
