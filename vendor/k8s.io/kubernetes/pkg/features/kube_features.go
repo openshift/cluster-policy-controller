@@ -533,7 +533,6 @@ const (
 
 	// owner: @RobertKrawitz
 	// alpha: v1.15
-	// beta: v1.25
 	//
 	// Allow use of filesystems for ephemeral storage monitoring.
 	// Only applies if LocalStorageCapacityIsolation is set.
@@ -1033,7 +1032,7 @@ var defaultKubernetesFeatureGates = map[featuregate.Feature]featuregate.FeatureS
 
 	LocalStorageCapacityIsolation: {Default: true, PreRelease: featuregate.GA, LockToDefault: true}, // remove in 1.27
 
-	LocalStorageCapacityIsolationFSQuotaMonitoring: {Default: true, PreRelease: featuregate.Beta},
+	LocalStorageCapacityIsolationFSQuotaMonitoring: {Default: false, PreRelease: featuregate.Alpha},
 
 	LogarithmicScaleDown: {Default: true, PreRelease: featuregate.Beta},
 
@@ -1151,6 +1150,8 @@ var defaultKubernetesFeatureGates = map[featuregate.Feature]featuregate.FeatureS
 	genericfeatures.ServerSideApply: {Default: true, PreRelease: featuregate.GA},
 
 	genericfeatures.ServerSideFieldValidation: {Default: true, PreRelease: featuregate.Beta},
+
+	genericfeatures.UnauthenticatedHTTP2DOSMitigation: {Default: false, PreRelease: featuregate.Beta},
 
 	// features that enable backwards compatibility but are scheduled to be removed
 	// ...
