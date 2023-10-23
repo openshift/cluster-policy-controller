@@ -321,6 +321,11 @@ func podMatchesScopeFunc(selector corev1.ScopedResourceSelectorRequirement, obje
 	case corev1.ResourceQuotaScopeNotBestEffort:
 		return !isBestEffort(pod), nil
 	case corev1.ResourceQuotaScopePriorityClass:
+		if selector.Operator == corev1.ScopeSelectorOpExists {
+			// This is just checking for existence of a priorityClass on the pod,
+			// no need to take the overhead of selector parsing/evaluation.
+			return len(pod.Spec.PriorityClassName) != 0, nil
+		}
 		return podMatchesSelector(pod, selector)
 	case corev1.ResourceQuotaScopeCrossNamespacePodAffinity:
 		return usesCrossNamespacePodAffinity(pod), nil
@@ -330,8 +335,8 @@ func podMatchesScopeFunc(selector corev1.ScopedResourceSelectorRequirement, obje
 
 // PodUsageFunc returns the quota usage for a pod.
 // A pod is charged for quota if the following are not true.
-//  - pod has a terminal phase (failed or succeeded)
-//  - pod has been marked for deletion and grace period has expired
+//   - pod has a terminal phase (failed or succeeded)
+//   - pod has been marked for deletion and grace period has expired
 func PodUsageFunc(obj runtime.Object, clock clock.Clock) (corev1.ResourceList, error) {
 	pod, err := toExternalPodOrError(obj)
 	if err != nil {
