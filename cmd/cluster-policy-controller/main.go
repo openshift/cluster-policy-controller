@@ -19,6 +19,8 @@ import (
 	"github.com/openshift/api/user"
 
 	cluster_policy_controller "github.com/openshift/cluster-policy-controller/pkg/cmd/cluster-policy-controller"
+
+	utilfeature "k8s.io/apiserver/pkg/util/feature"
 )
 
 func init() {
@@ -52,6 +54,9 @@ func NewClusterPolicyControllerCommand() *cobra.Command {
 	}
 	start := cluster_policy_controller.NewClusterPolicyControllerCommand("start")
 	cmd.AddCommand(start)
+
+	flags := cmd.Flags()
+	utilfeature.DefaultMutableFeatureGate.AddFlag(flags)
 
 	return cmd
 }
