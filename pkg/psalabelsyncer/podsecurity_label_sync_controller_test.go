@@ -508,7 +508,7 @@ func TestEnforcingPodSecurityAdmissionLabelSynchronizationController_sync(t *tes
 			wantErr:            false,
 			expectNSUpdate:     true,
 			expectedPSaLevel:   "restricted",
-			expectedPSaVersion: "v1.24",
+			expectedPSaVersion: "latest",
 		},
 		{
 			name:           "SA with restricted SCC, NS with previous enforce version managed by someone else but sync label set to false",
