@@ -1,15 +1,9 @@
 reviewers:
   - atiratree
-  - mfojtik
-  - soltysh
   - deads2k
-  - stlaz
   - ingvagabund
 approvers:
   - atiratree
-  - mfojtik
-  - soltysh
   - deads2k
-  - stlaz
   - ingvagabund
 component: "kube-controller-manager"
