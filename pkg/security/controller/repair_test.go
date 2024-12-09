@@ -2,10 +2,11 @@ package controller
 
 import (
 	"context"
-	"github.com/openshift/library-go/pkg/controller/factory"
-	"github.com/openshift/library-go/pkg/operator/events"
 	"math/big"
 	"testing"
+
+	"github.com/openshift/library-go/pkg/controller/factory"
+	"github.com/openshift/library-go/pkg/operator/events"
 
 	securityinternalv1 "github.com/openshift/api/securityinternal/v1"
 
@@ -21,6 +22,7 @@ import (
 	securityv1 "github.com/openshift/api/security/v1"
 	securityv1fakeclient "github.com/openshift/client-go/securityinternal/clientset/versioned/fake"
 	"github.com/openshift/library-go/pkg/security/uid"
+	"k8s.io/utils/clock"
 )
 
 func TestRepair(t *testing.T) {
@@ -35,7 +37,7 @@ func TestRepair(t *testing.T) {
 		rangeAllocationClient: securityclient.SecurityV1(),
 	}
 
-	syncContext := factory.NewSyncContext(controllerName, events.NewInMemoryRecorder(controllerName))
+	syncContext := factory.NewSyncContext(controllerName, events.NewInMemoryRecorder(controllerName, clock.RealClock{}))
 	err := c.Repair(context.TODO(), syncContext)
 	if err != nil {
 		t.Fatal(err)
@@ -78,7 +80,7 @@ func TestRepairIgnoresMismatch(t *testing.T) {
 		rangeAllocationClient: securityclient.SecurityV1(),
 	}
 
-	syncContext := factory.NewSyncContext(controllerName, events.NewInMemoryRecorder(controllerName))
+	syncContext := factory.NewSyncContext(controllerName, events.NewInMemoryRecorder(controllerName, clock.RealClock{}))
 	err := c.Repair(context.TODO(), syncContext)
 	if err != nil {
 		t.Fatal(err)
@@ -170,7 +172,7 @@ func TestRepairTable(t *testing.T) {
 				rangeAllocationClient: securityclient.SecurityV1(),
 			}
 
-			syncContext := factory.NewSyncContext(controllerName, events.NewInMemoryRecorder(controllerName))
+			syncContext := factory.NewSyncContext(controllerName, events.NewInMemoryRecorder(controllerName, clock.RealClock{}))
 			err := c.Repair(context.TODO(), syncContext)
 			if err != nil {
 				t.Fatal(err)
