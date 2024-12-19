@@ -4,11 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/openshift/library-go/pkg/controller/factory"
-	"github.com/openshift/library-go/pkg/operator/events"
 	"math/big"
 	"strings"
 	"testing"
+
+	"github.com/openshift/library-go/pkg/controller/factory"
+	"github.com/openshift/library-go/pkg/operator/events"
 
 	"github.com/davecgh/go-spew/spew"
 
@@ -29,6 +30,7 @@ import (
 	securityv1fakeclient "github.com/openshift/client-go/securityinternal/clientset/versioned/fake"
 	"github.com/openshift/cluster-policy-controller/pkg/security/mcs"
 	"github.com/openshift/library-go/pkg/security/uid"
+	"k8s.io/utils/clock"
 )
 
 type patchData struct {
@@ -55,7 +57,7 @@ func TestController(t *testing.T) {
 		rangeAllocationClient: securityclient.SecurityV1(),
 		encoder:               encoder,
 	}
-	syncContext := factory.NewSyncContext(controllerName, events.NewInMemoryRecorder(controllerName))
+	syncContext := factory.NewSyncContext(controllerName, events.NewInMemoryRecorder(controllerName, clock.RealClock{}))
 	ctx := context.TODO()
 	err := c.Repair(ctx, syncContext)
 	if err != nil {
@@ -174,7 +176,7 @@ func TestControllerError(t *testing.T) {
 			}
 
 			ctx := context.TODO()
-			syncContext := factory.NewSyncContext(controllerName, events.NewInMemoryRecorder(controllerName))
+			syncContext := factory.NewSyncContext(controllerName, events.NewInMemoryRecorder(controllerName, clock.RealClock{}))
 			err := c.Repair(ctx, syncContext)
 			if err != nil {
 				t.Fatal(err)
