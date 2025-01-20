@@ -4,11 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/openshift/library-go/pkg/controller/factory"
-	"github.com/openshift/library-go/pkg/operator/events"
 	"math/big"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/openshift/library-go/pkg/controller/factory"
+	"github.com/openshift/library-go/pkg/operator/events"
 
 	"github.com/davecgh/go-spew/spew"
 
@@ -23,6 +25,7 @@ import (
 	clientgotesting "k8s.io/client-go/testing"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/kubernetes/pkg/controller"
+	clocktesting "k8s.io/utils/clock/testing"
 
 	securityv1 "github.com/openshift/api/security/v1"
 	securityinternalv1 "github.com/openshift/api/securityinternal/v1"
@@ -55,7 +58,7 @@ func TestController(t *testing.T) {
 		rangeAllocationClient: securityclient.SecurityV1(),
 		encoder:               encoder,
 	}
-	syncContext := factory.NewSyncContext(controllerName, events.NewInMemoryRecorder(controllerName))
+	syncContext := factory.NewSyncContext(controllerName, events.NewInMemoryRecorder(controllerName, clocktesting.NewFakePassiveClock(time.Now())))
 	ctx := context.TODO()
 	err := c.Repair(ctx, syncContext)
 	if err != nil {
@@ -174,7 +177,7 @@ func TestControllerError(t *testing.T) {
 			}
 
 			ctx := context.TODO()
-			syncContext := factory.NewSyncContext(controllerName, events.NewInMemoryRecorder(controllerName))
+			syncContext := factory.NewSyncContext(controllerName, events.NewInMemoryRecorder(controllerName, clocktesting.NewFakePassiveClock(time.Now())))
 			err := c.Repair(ctx, syncContext)
 			if err != nil {
 				t.Fatal(err)
