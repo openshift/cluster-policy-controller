@@ -420,6 +420,7 @@ func TestEnforcingPodSecurityAdmissionLabelSynchronizationController_sync(t *tes
 		expectNSUpdate     bool
 		expectedPSaLevel   string
 		expectedPSaVersion string
+		expectedAnnotation string
 	}{
 		{
 			name:   "non-existent ns",
@@ -455,9 +456,10 @@ func TestEnforcingPodSecurityAdmissionLabelSynchronizationController_sync(t *tes
 			serviceAccounts: []*corev1.ServiceAccount{
 				{ObjectMeta: metav1.ObjectMeta{Name: "testspecificsa", Namespace: "controlled-namespace"}},
 			},
-			wantErr:          false,
-			expectNSUpdate:   true,
-			expectedPSaLevel: "baseline",
+			wantErr:            false,
+			expectNSUpdate:     true,
+			expectedPSaLevel:   "baseline",
+			expectedAnnotation: "baseline",
 		},
 		{
 			name:   "SA with restricted and privileged SCCs assigned",
@@ -465,9 +467,10 @@ func TestEnforcingPodSecurityAdmissionLabelSynchronizationController_sync(t *tes
 			serviceAccounts: []*corev1.ServiceAccount{
 				{ObjectMeta: metav1.ObjectMeta{Name: "testspecificsa2", Namespace: "controlled-namespace"}},
 			},
-			wantErr:          false,
-			expectNSUpdate:   true,
-			expectedPSaLevel: "privileged",
+			wantErr:            false,
+			expectNSUpdate:     true,
+			expectedPSaLevel:   "privileged",
+			expectedAnnotation: "privileged",
 		},
 		{
 			name:   "SA with restricted SCC assigned",
@@ -475,9 +478,10 @@ func TestEnforcingPodSecurityAdmissionLabelSynchronizationController_sync(t *tes
 			serviceAccounts: []*corev1.ServiceAccount{
 				{ObjectMeta: metav1.ObjectMeta{Name: "testspecificsa3", Namespace: "controlled-namespace"}},
 			},
-			wantErr:          false,
-			expectNSUpdate:   true,
-			expectedPSaLevel: "restricted",
+			wantErr:            false,
+			expectNSUpdate:     true,
+			expectedPSaLevel:   "restricted",
+			expectedAnnotation: "restricted",
 		},
 		{
 			name:   "SA with restricted SCC assigned in am NS with previous enforce labels",
@@ -485,9 +489,10 @@ func TestEnforcingPodSecurityAdmissionLabelSynchronizationController_sync(t *tes
 			serviceAccounts: []*corev1.ServiceAccount{
 				{ObjectMeta: metav1.ObjectMeta{Name: "testspecificsa3", Namespace: "controlled-namespace-previous-enforce-labels"}},
 			},
-			wantErr:          false,
-			expectNSUpdate:   true,
-			expectedPSaLevel: "restricted",
+			wantErr:            false,
+			expectNSUpdate:     true,
+			expectedPSaLevel:   "restricted",
+			expectedAnnotation: "restricted",
 		},
 		{
 			name:   "SA with restricted SCC, NS with previous enforce version managed by someone else",
@@ -495,9 +500,10 @@ func TestEnforcingPodSecurityAdmissionLabelSynchronizationController_sync(t *tes
 			serviceAccounts: []*corev1.ServiceAccount{
 				{ObjectMeta: metav1.ObjectMeta{Name: "testspecificsa3", Namespace: "controlled-namespace-previous-enforce-version-different-owner"}},
 			},
-			wantErr:          false,
-			expectNSUpdate:   true,
-			expectedPSaLevel: "restricted",
+			wantErr:            false,
+			expectNSUpdate:     true,
+			expectedPSaLevel:   "restricted",
+			expectedAnnotation: "restricted",
 		},
 		{
 			name:   "SA with restricted SCC, NS with previous enforce version managed by someone else but sync label set to true",
@@ -509,6 +515,7 @@ func TestEnforcingPodSecurityAdmissionLabelSynchronizationController_sync(t *tes
 			expectNSUpdate:     true,
 			expectedPSaLevel:   "restricted",
 			expectedPSaVersion: "latest",
+			expectedAnnotation: "restricted",
 		},
 		{
 			name:           "SA with restricted SCC, NS with previous enforce version managed by someone else but sync label set to false",
@@ -522,9 +529,10 @@ func TestEnforcingPodSecurityAdmissionLabelSynchronizationController_sync(t *tes
 			serviceAccounts: []*corev1.ServiceAccount{
 				{ObjectMeta: metav1.ObjectMeta{Name: "testspecificsa3", Namespace: "controlled-namespace-different-owner-and-sync-label-unset"}},
 			},
-			wantErr:          false,
-			expectNSUpdate:   false,
-			expectedPSaLevel: "privileged",
+			wantErr:            false,
+			expectNSUpdate:     true,
+			expectedPSaLevel:   "privileged",
+			expectedAnnotation: "restricted",
 		},
 	}
 	for _, tt := range tests {
@@ -619,6 +627,9 @@ func TestEnforcingPodSecurityAdmissionLabelSynchronizationController_sync(t *tes
 				require.Equal(t, tt.expectedPSaLevel, nsModified.Labels[psapi.WarnLevelLabel], "unexpected PSa warn level")
 				require.Equal(t, tt.expectedPSaLevel, nsModified.Labels[psapi.AuditLevelLabel], "unexpected PSa audit level")
 			}
+			if nsModified != nil && len(tt.expectedAnnotation) > 0 {
+				require.Equal(t, tt.expectedAnnotation, nsModified.Annotations[securityv1.MinimallySufficientPodSecurityStandard], "unexpected PSa annotation value")
+			}
 			if nsModified != nil && len(tt.expectedPSaVersion) > 0 {
 				require.Equal(t, tt.expectedPSaVersion, nsModified.Labels[psapi.EnforceVersionLabel], "unexpected PSa enforcement version")
 				require.Equal(t, tt.expectedPSaVersion, nsModified.Labels[psapi.WarnVersionLabel], "unexpected PSa warn version")
@@ -643,12 +654,13 @@ func TestPodSecurityAdmissionLabelSynchronizationController_sync(t *testing.T) {
 	testNamespaces := testNamespaces()
 
 	tests := []struct {
-		name             string
-		serviceAccounts  []*corev1.ServiceAccount
-		nsName           string
-		wantErr          bool
-		expectNSUpdate   bool
-		expectedPSaLevel string
+		name               string
+		serviceAccounts    []*corev1.ServiceAccount
+		nsName             string
+		wantErr            bool
+		expectNSUpdate     bool
+		expectedPSaLevel   string
+		expectedAnnotation string
 	}{
 		{
 			name:   "non-existent ns",
@@ -684,9 +696,10 @@ func TestPodSecurityAdmissionLabelSynchronizationController_sync(t *testing.T) {
 			serviceAccounts: []*corev1.ServiceAccount{
 				{ObjectMeta: metav1.ObjectMeta{Name: "testspecificsa", Namespace: "controlled-namespace"}},
 			},
-			wantErr:          false,
-			expectNSUpdate:   true,
-			expectedPSaLevel: "baseline",
+			wantErr:            false,
+			expectNSUpdate:     true,
+			expectedPSaLevel:   "baseline",
+			expectedAnnotation: "baseline",
 		},
 		{
 			name:   "SA with restricted and privileged SCCs assigned",
@@ -694,9 +707,10 @@ func TestPodSecurityAdmissionLabelSynchronizationController_sync(t *testing.T) {
 			serviceAccounts: []*corev1.ServiceAccount{
 				{ObjectMeta: metav1.ObjectMeta{Name: "testspecificsa2", Namespace: "controlled-namespace"}},
 			},
-			wantErr:          false,
-			expectNSUpdate:   true,
-			expectedPSaLevel: "privileged",
+			wantErr:            false,
+			expectNSUpdate:     true,
+			expectedPSaLevel:   "privileged",
+			expectedAnnotation: "privileged",
 		},
 		{
 			name:   "SA with restricted SCC assigned",
@@ -704,9 +718,10 @@ func TestPodSecurityAdmissionLabelSynchronizationController_sync(t *testing.T) {
 			serviceAccounts: []*corev1.ServiceAccount{
 				{ObjectMeta: metav1.ObjectMeta{Name: "testspecificsa3", Namespace: "controlled-namespace"}},
 			},
-			wantErr:          false,
-			expectNSUpdate:   true,
-			expectedPSaLevel: "restricted",
+			wantErr:            false,
+			expectNSUpdate:     true,
+			expectedPSaLevel:   "restricted",
+			expectedAnnotation: "restricted",
 		},
 	}
 	for _, tt := range tests {
@@ -787,6 +802,9 @@ func TestPodSecurityAdmissionLabelSynchronizationController_sync(t *testing.T) {
 			if nsModified != nil && len(tt.expectedPSaLevel) > 0 {
 				require.Equal(t, tt.expectedPSaLevel, nsModified.Labels[psapi.WarnLevelLabel], "unexpected PSa warn level")
 				require.Equal(t, tt.expectedPSaLevel, nsModified.Labels[psapi.AuditLevelLabel], "unexpected PSa audit level")
+			}
+			if nsModified != nil && len(tt.expectedAnnotation) > 0 {
+				require.Equal(t, tt.expectedAnnotation, nsModified.Annotations[securityv1.MinimallySufficientPodSecurityStandard], "unexpected PSa annotation value")
 			}
 		})
 	}
