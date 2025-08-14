@@ -743,7 +743,6 @@ k8s.io/api/storagemigration/v1alpha1
 k8s.io/apiextensions-apiserver/pkg/features
 # k8s.io/apimachinery v0.33.2 => k8s.io/apimachinery v0.33.2
 ## explicit; go 1.24.0
-k8s.io/apimachinery/pkg/api/apitesting
 k8s.io/apimachinery/pkg/api/equality
 k8s.io/apimachinery/pkg/api/errors
 k8s.io/apimachinery/pkg/api/meta
