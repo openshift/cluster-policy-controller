@@ -9,17 +9,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/openshift/library-go/pkg/controller/factory"
-	"github.com/openshift/library-go/pkg/operator/events"
-
 	"github.com/davecgh/go-spew/spew"
+	"github.com/google/go-cmp/cmp"
 
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/apitesting"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	runtimejson "k8s.io/apimachinery/pkg/runtime/serializer/json"
+	"k8s.io/apimachinery/pkg/types"
 	kubefakeclient "k8s.io/client-go/kubernetes/fake"
 	corev1listers "k8s.io/client-go/listers/core/v1"
 	clientgotesting "k8s.io/client-go/testing"
@@ -31,10 +28,13 @@ import (
 	securityinternalv1 "github.com/openshift/api/securityinternal/v1"
 	securityv1fakeclient "github.com/openshift/client-go/securityinternal/clientset/versioned/fake"
 	"github.com/openshift/cluster-policy-controller/pkg/security/mcs"
+	"github.com/openshift/library-go/pkg/controller/factory"
+	"github.com/openshift/library-go/pkg/operator/events"
 	"github.com/openshift/library-go/pkg/security/uid"
 )
 
 type patchData struct {
+	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 }
 
@@ -43,12 +43,10 @@ func TestController(t *testing.T) {
 	securityclient := securityv1fakeclient.NewSimpleClientset()
 	indexer := cache.NewIndexer(controller.KeyFunc, cache.Indexers{})
 
+	const resourceVersion = "123abc"
+
 	uidr, _ := uid.NewRange(10, 20, 2)
 	mcsr, _ := mcs.NewRange("s0:", 10, 2)
-
-	scheme, codecs := apitesting.SchemeForOrDie(corev1.AddToScheme)
-	jsonSerializer := runtimejson.NewSerializer(runtimejson.DefaultMetaFactory, scheme, scheme, false)
-	encoder := codecs.WithoutConversion().EncoderForVersion(jsonSerializer, corev1.SchemeGroupVersion)
 
 	c := &NamespaceSCCAllocationController{
 		requiredUIDRange:      uidr,
@@ -56,7 +54,6 @@ func TestController(t *testing.T) {
 		namespaceClient:       kubeclient.CoreV1().Namespaces(),
 		nsLister:              corev1listers.NewNamespaceLister(indexer),
 		rangeAllocationClient: securityclient.SecurityV1(),
-		encoder:               encoder,
 	}
 	syncContext := factory.NewSyncContext(controllerName, events.NewInMemoryRecorder(controllerName, clocktesting.NewFakePassiveClock(time.Now())))
 	ctx := context.TODO()
@@ -76,7 +73,10 @@ func TestController(t *testing.T) {
 	}
 	securityclient.ClearActions()
 
-	err = c.allocate(ctx, syncContext, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "test"}})
+	err = c.allocate(ctx, syncContext, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{
+		Name:            "test",
+		ResourceVersion: resourceVersion,
+	}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -87,19 +87,32 @@ func TestController(t *testing.T) {
 	}
 	createNSAction := kubeActions[0]
 
+	if patchType := createNSAction.(clientgotesting.PatchAction).GetPatchType(); patchType != types.ApplyPatchType {
+		t.Errorf("unexpected patch type; expected %v, got %v", types.ApplyPatchType, patchType)
+	}
+
 	data := createNSAction.(clientgotesting.PatchAction).GetPatch()
 	got := patchData{}
 	if err := json.Unmarshal(data, &got); err != nil {
 		t.Fatalf("unexpected error parsing patch data: %v", err)
 	}
-	if got.Annotations[securityv1.UIDRangeAnnotation] != "10/2" {
-		t.Errorf("unexpected uid annotation: %#v", got)
+	expected := patchData{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Namespace",
+			APIVersion: "v1",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "test",
+			ResourceVersion: resourceVersion,
+			Annotations: map[string]string{
+				securityv1.UIDRangeAnnotation:           "10/2",
+				securityv1.SupplementalGroupsAnnotation: "10/2",
+				securityv1.MCSAnnotation:                "s0:c1,c0",
+			},
+		},
 	}
-	if got.Annotations[securityv1.SupplementalGroupsAnnotation] != "10/2" {
-		t.Errorf("unexpected supplemental group annotation: %#v", got)
-	}
-	if got.Annotations[securityv1.MCSAnnotation] != "s0:c1,c0" {
-		t.Errorf("unexpected mcs annotation: %#v", got)
+	if !cmp.Equal(&got, &expected) {
+		t.Errorf("patch body mismatch:\n%s\n", cmp.Diff(&expected, &got))
 	}
 
 	rangeAllocationActions = securityclient.Actions()
@@ -163,17 +176,12 @@ func TestControllerError(t *testing.T) {
 			uidr, _ := uid.NewRange(10, 19, 2)
 			mcsr, _ := mcs.NewRange("s0:", 10, 2)
 
-			scheme, codecs := apitesting.SchemeForOrDie(corev1.AddToScheme)
-			jsonSerializer := runtimejson.NewSerializer(runtimejson.DefaultMetaFactory, scheme, scheme, false)
-			encoder := codecs.WithoutConversion().EncoderForVersion(jsonSerializer, corev1.SchemeGroupVersion)
-
 			c := &NamespaceSCCAllocationController{
 				requiredUIDRange:      uidr,
 				mcsAllocator:          DefaultMCSAllocation(uidr, mcsr, 5),
 				namespaceClient:       kubeclient.CoreV1().Namespaces(),
 				nsLister:              corev1listers.NewNamespaceLister(indexer),
 				rangeAllocationClient: securityclient.SecurityV1(),
-				encoder:               encoder,
 			}
 
 			ctx := context.TODO()
