@@ -358,6 +358,7 @@ func Test_convert_volumes(t *testing.T) {
 		name    string
 		volumes []securityv1.FSType
 		want    uint8
+		wantErr bool
 	}{
 		{
 			name: "hostpath means privileged",
@@ -393,7 +394,12 @@ func Test_convert_volumes(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := convert_volumes(tt.volumes); got != tt.want {
+			got, err := convert_volumes(tt.volumes)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("convert_volumes() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if got != tt.want {
 				t.Errorf("convert_volumes() = %v, want %v", got, tt.want)
 			}
 		})
