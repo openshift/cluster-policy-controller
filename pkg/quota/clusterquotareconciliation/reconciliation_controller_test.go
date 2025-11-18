@@ -10,11 +10,11 @@ import (
 	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	utildiff "k8s.io/apimachinery/pkg/util/diff"
 	"k8s.io/apimachinery/pkg/util/sets"
 	utilquota "k8s.io/apiserver/pkg/quota/v1"
 	clientgotesting "k8s.io/client-go/testing"
 
+	"github.com/google/go-cmp/cmp"
 	quotav1 "github.com/openshift/api/quota/v1"
 	fakequotaclient "github.com/openshift/client-go/quota/clientset/versioned/fake"
 	"github.com/openshift/library-go/pkg/quota/clusterquotamapping"
@@ -294,7 +294,7 @@ func TestSyncFunc(t *testing.T) {
 			}
 
 			if !equality.Semantic.DeepEqual(tc.expectedQuota(), actualQuota) {
-				t.Fatalf("%s: %v", tc.name, utildiff.ObjectDiff(tc.expectedQuota(), actualQuota))
+				t.Fatalf("%s: %v", tc.name, cmp.Diff(tc.expectedQuota(), actualQuota))
 			}
 		})
 	}
