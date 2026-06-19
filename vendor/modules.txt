@@ -46,7 +46,7 @@ github.com/felixge/httpsnoop
 ## explicit; go 1.17
 github.com/fsnotify/fsnotify
 github.com/fsnotify/fsnotify/internal
-# github.com/fxamacker/cbor/v2 v2.9.0
+# github.com/fxamacker/cbor/v2 v2.9.2
 ## explicit; go 1.20
 github.com/fxamacker/cbor/v2
 # github.com/go-bindata/go-bindata v3.1.2+incompatible
@@ -191,7 +191,7 @@ github.com/munnerz/goautoneg
 # github.com/opencontainers/go-digest v1.0.0
 ## explicit; go 1.13
 github.com/opencontainers/go-digest
-# github.com/openshift/api v0.0.0-20260309155933-45fd88d185dd
+# github.com/openshift/api v0.0.0-20260618181827-d22a47a846dc
 ## explicit; go 1.25.0
 github.com/openshift/api
 github.com/openshift/api/annotations
@@ -214,6 +214,7 @@ github.com/openshift/api/config/v1alpha2
 github.com/openshift/api/console
 github.com/openshift/api/console/v1
 github.com/openshift/api/etcd
+github.com/openshift/api/etcd/v1
 github.com/openshift/api/etcd/v1alpha1
 github.com/openshift/api/helm
 github.com/openshift/api/helm/v1beta1
@@ -532,8 +533,8 @@ go.yaml.in/yaml/v2
 # go.yaml.in/yaml/v3 v3.0.4
 ## explicit; go 1.16
 go.yaml.in/yaml/v3
-# golang.org/x/crypto v0.48.0
-## explicit; go 1.24.0
+# golang.org/x/crypto v0.53.0
+## explicit; go 1.25.0
 golang.org/x/crypto/cryptobyte
 golang.org/x/crypto/cryptobyte/asn1
 golang.org/x/crypto/hkdf
@@ -544,7 +545,7 @@ golang.org/x/crypto/salsa20/salsa
 # golang.org/x/exp v0.0.0-20260218203240-3dfff04db8fa
 ## explicit; go 1.25.0
 golang.org/x/exp/slices
-# golang.org/x/net v0.51.0
+# golang.org/x/net v0.56.0
 ## explicit; go 1.25.0
 golang.org/x/net/context
 golang.org/x/net/http/httpguts
@@ -560,21 +561,21 @@ golang.org/x/net/websocket
 ## explicit; go 1.25.0
 golang.org/x/oauth2
 golang.org/x/oauth2/internal
-# golang.org/x/sync v0.20.0
+# golang.org/x/sync v0.21.0
 ## explicit; go 1.25.0
 golang.org/x/sync/singleflight
-# golang.org/x/sys v0.42.0
+# golang.org/x/sys v0.46.0
 ## explicit; go 1.25.0
 golang.org/x/sys/cpu
 golang.org/x/sys/plan9
 golang.org/x/sys/unix
 golang.org/x/sys/windows
 golang.org/x/sys/windows/registry
-# golang.org/x/term v0.40.0
-## explicit; go 1.24.0
+# golang.org/x/term v0.44.0
+## explicit; go 1.25.0
 golang.org/x/term
-# golang.org/x/text v0.34.0
-## explicit; go 1.24.0
+# golang.org/x/text v0.38.0
+## explicit; go 1.25.0
 golang.org/x/text/cases
 golang.org/x/text/feature/plural
 golang.org/x/text/internal
@@ -1441,8 +1442,8 @@ k8s.io/kms/apis/v1beta1
 k8s.io/kms/apis/v2
 k8s.io/kms/pkg/service
 k8s.io/kms/pkg/util
-# k8s.io/kube-openapi v0.0.0-20260304202019-5b3e3fdb0acf
-## explicit; go 1.23.0
+# k8s.io/kube-openapi v0.0.0-20260618221249-bc653b64f974
+## explicit; go 1.24.0
 k8s.io/kube-openapi/pkg/builder
 k8s.io/kube-openapi/pkg/builder3
 k8s.io/kube-openapi/pkg/builder3/util
@@ -1453,6 +1454,11 @@ k8s.io/kube-openapi/pkg/handler
 k8s.io/kube-openapi/pkg/handler3
 k8s.io/kube-openapi/pkg/internal
 k8s.io/kube-openapi/pkg/internal/third_party/go-json-experiment/json
+k8s.io/kube-openapi/pkg/internal/third_party/go-json-experiment/json/internal
+k8s.io/kube-openapi/pkg/internal/third_party/go-json-experiment/json/internal/jsonflags
+k8s.io/kube-openapi/pkg/internal/third_party/go-json-experiment/json/internal/jsonopts
+k8s.io/kube-openapi/pkg/internal/third_party/go-json-experiment/json/internal/jsonwire
+k8s.io/kube-openapi/pkg/internal/third_party/go-json-experiment/json/jsontext
 k8s.io/kube-openapi/pkg/internal/third_party/govalidator
 k8s.io/kube-openapi/pkg/schemaconv
 k8s.io/kube-openapi/pkg/schemamutation
@@ -1536,7 +1542,7 @@ sigs.k8s.io/json/internal/golang/encoding/json
 ## explicit; go 1.18
 sigs.k8s.io/randfill
 sigs.k8s.io/randfill/bytesource
-# sigs.k8s.io/structured-merge-diff/v6 v6.3.2
+# sigs.k8s.io/structured-merge-diff/v6 v6.4.0
 ## explicit; go 1.23
 sigs.k8s.io/structured-merge-diff/v6/fieldpath
 sigs.k8s.io/structured-merge-diff/v6/merge
