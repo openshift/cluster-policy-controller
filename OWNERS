@@ -1,5 +1,9 @@
 reviewers:
   - control-plane-approvers
+  - ibihim
+  - liouk
 approvers:
   - control-plane-approvers
+  - ibihim
+  - liouk
 component: "kube-controller-manager"
