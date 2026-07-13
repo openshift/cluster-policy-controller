@@ -169,7 +169,7 @@ github.com/munnerz/goautoneg
 # github.com/opencontainers/go-digest v1.0.0
 ## explicit; go 1.13
 github.com/opencontainers/go-digest
-# github.com/openshift/api v0.0.0-20241004095111-b1f700bdd8d2
+# github.com/openshift/api v0.0.0-20260713195309-f9b2d1ae30eb
 ## explicit; go 1.22.0
 github.com/openshift/api
 github.com/openshift/api/annotations
