@@ -6,6 +6,11 @@ Controllers managed by cluster-policy-controller are:
 * cluster csr approver controller - csr approver for monitoring scraping
 * podsecurity admission label syncer controller - configure the PodSecurity admission namespace label for namespaces with "security.openshift.io/scc.podSecurityLabelSync: true" label
 
+For more details please see:
+- [AGENTS.md](./AGENTS.md) - Code patterns and conventions for AI agents
+- [ARCHITECTURE.md](./ARCHITECTURE.md) - System design and architecture
+- [CONTRIBUTING.md](./CONTRIBUTING.md) - Contribution guide
+
 ## Run
 The `cluster-policy-controller` runs as a container in the `openshift-kube-controller-manager namespace`, in the kube-controller-manager static pod.
 This pod is defined and managed by the [`kube-controller-manager`](https://github.com/openshift/cluster-kube-controller-manager-operator/)
