@@ -5,7 +5,6 @@ var ControllerInitializers = map[string]InitFunc{
 	"openshift.io/resourcequota":                          RunResourceQuotaManager,
 	"openshift.io/cluster-quota-reconciliation":           RunClusterQuotaReconciliationController,
 	"openshift.io/cluster-csr-approver":                   RunCSRApproverController,
-	"openshift.io/podsecurity-admission-label-syncer":     runPodSecurityAdmissionLabelSynchronizationController,
 	"openshift.io/privileged-namespaces-psa-label-syncer": runPrivilegedNamespacesPSALabelSyncer,
 }
 
