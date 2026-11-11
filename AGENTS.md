@@ -41,8 +41,9 @@ The cluster-policy-controller is a multi-controller binary that runs inside the 
 - Manage ResourceQuota with OpenShift-specific image stream quota support
 - Reconcile ClusterResourceQuota usage across namespaces
 - Approve CertificateSigningRequests for monitoring components
-- If PSA enforcement is turned on, synchronize Pod Security Admission (PSA) labels based on SCC assignments
-- If PSA enforcement is turned off, synchronize only warn and audit PSA labels based on SCC assignments
+- Without any feature gates (MicroShift), synchronize enforce, warn and audit Pod Security Admission (PSA) labels based on SCC assignments
+- If the `OpenShiftPodSecurityAdmission` feature gate is turned off, synchronize only warn and audit PSA labels based on SCC assignments
+- If the `OpenShiftPodSecurityAdmission` feature gate is turned on or not listed, do not synchronize PSA labels
 - Label privileged system namespaces with PSA privileged level
 
 ### Controllers

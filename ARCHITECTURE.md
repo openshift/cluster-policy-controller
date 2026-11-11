@@ -338,17 +338,18 @@ For each allowed SCC: convert to PSA level
 Take the most permissive PSA level across all SAs
          │
          ▼
-- If OpenShiftPodSecurityAdmission=true server-side apply pod-security.kubernetes.io/enforce,
+- In enforcing mode server-side apply pod-security.kubernetes.io/enforce,
   pod-security.kubernetes.io/warn and pod-security.kubernetes.io/audit labels.
-- If OpenShiftPodSecurityAdmission=false server-side apply pod-security.kubernetes.io/warn and
+- In advising mode server-side apply pod-security.kubernetes.io/warn and
   pod-security.kubernetes.io/audit labels. We do not set pod-security.kubernetes.io/enforce label.
 - Set version labels to "latest"
 - Set annotation: security.openshift.io/MinimallySufficientPodSecurityStandard
 ```
 
-**Two Modes** (controlled by feature gate):
-- **Enforcing** (default, `OpenShiftPodSecurityAdmission=true`): Sets enforce + warn + audit labels
+**Modes** (derived from the `featureGates` in the controller config, see `pkg/cmd/controller/psalabelsyncer.go`):
+- **Enforcing** (no feature gates at all, as on MicroShift): Sets enforce + warn + audit labels
 - **Advising** (`OpenShiftPodSecurityAdmission=false`): Sets only warn + audit labels (no enforcement)
+- **Disabled** (`OpenShiftPodSecurityAdmission=true`, or the gate is not listed): The controller does not start
 
 **SAToSCCCache**: Maintains a mapping of ServiceAccount → accessible SCCs by indexing RoleBindings and ClusterRoleBindings. Watches for RBAC changes and re-enqueues affected namespaces.
 
