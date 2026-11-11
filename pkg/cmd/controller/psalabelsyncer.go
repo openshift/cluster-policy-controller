@@ -31,10 +31,8 @@ func runPodSecurityAdmissionLabelSynchronizationController(ctx context.Context, 
 		}
 		go controller.Run(ctx, 1)
 
-	case featureGates.Has("OpenShiftPodSecurityAdmission=true"):
-		// if explicitly on or unspecified, run as enforcing.
-		fallthrough
-	default:
+	case featureGates.Len() == 0:
+		// MicroShift passes no feature gates at all and keeps enforcing.
 		controller, err := psalabelsyncer.NewEnforcingPodSecurityAdmissionLabelSynchronizationController(
 			kubeClient.CoreV1().Namespaces(),
 			controllerCtx.KubernetesInformers.Core().V1().Namespaces(),
@@ -47,6 +45,11 @@ func runPodSecurityAdmissionLabelSynchronizationController(ctx context.Context, 
 			return true, err
 		}
 		go controller.Run(ctx, 1)
+
+	default:
+		// The gate is enabled or no longer listed. OpenShift and HyperShift
+		// do not run the PSA label syncer then.
+		return false, nil
 	}
 
 	return true, nil
