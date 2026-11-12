@@ -2,10 +2,42 @@ package controller
 
 import (
 	"context"
+	"slices"
 
 	"github.com/openshift/cluster-policy-controller/pkg/psalabelsyncer"
-	"k8s.io/apimachinery/pkg/util/sets"
 )
+
+// psaLabelSyncerMode is the way the PSA label syncer runs.
+type psaLabelSyncerMode string
+
+const (
+	// psaLabelSyncerEnforcing syncs the enforce, warn and audit PSA labels.
+	psaLabelSyncerEnforcing psaLabelSyncerMode = "enforcing"
+	// psaLabelSyncerAdvising syncs only the warn and audit PSA labels.
+	psaLabelSyncerAdvising psaLabelSyncerMode = "advising"
+	// psaLabelSyncerDisabled does not start the PSA label syncer.
+	psaLabelSyncerDisabled psaLabelSyncerMode = "disabled"
+)
+
+// psaLabelSyncerModeFor picks the mode of the PSA label syncer from the
+// feature gates in the controller config.
+func psaLabelSyncerModeFor(featureGates []string) psaLabelSyncerMode {
+	switch {
+	case len(featureGates) == 0:
+		// MicroShift passes no feature gates at all. It enforces restricted
+		// by default and relies on the PSA label syncer to set enforce labels.
+		return psaLabelSyncerEnforcing
+	case slices.Contains(featureGates, "OpenShiftPodSecurityAdmission=false"):
+		// OpenShift and HyperShift pass every feature gate, enabled or
+		// disabled. With the gate disabled, they keep the warn and audit labels.
+		return psaLabelSyncerAdvising
+	default:
+		// The gate is enabled or no longer listed. OpenShift and HyperShift
+		// do not run the PSA label syncer then, so it never sets enforce
+		// labels there, including during upgrades and rollbacks.
+		return psaLabelSyncerDisabled
+	}
+}
 
 func runPodSecurityAdmissionLabelSynchronizationController(ctx context.Context, controllerCtx *EnhancedControllerContext) (bool, error) {
 
@@ -14,10 +46,8 @@ func runPodSecurityAdmissionLabelSynchronizationController(ctx context.Context, 
 		return true, err
 	}
 
-	featureGates := sets.NewString(controllerCtx.OpenshiftControllerConfig.FeatureGates...)
-	switch {
-	case featureGates.Has("OpenShiftPodSecurityAdmission=false"):
-		// if explicitly off, disable
+	switch psaLabelSyncerModeFor(controllerCtx.OpenshiftControllerConfig.FeatureGates) {
+	case psaLabelSyncerAdvising:
 		controller, err := psalabelsyncer.NewAdvisingPodSecurityAdmissionLabelSynchronizationController(
 			kubeClient.CoreV1().Namespaces(),
 			controllerCtx.KubernetesInformers.Core().V1().Namespaces(),
@@ -31,10 +61,7 @@ func runPodSecurityAdmissionLabelSynchronizationController(ctx context.Context, 
 		}
 		go controller.Run(ctx, 1)
 
-	case featureGates.Has("OpenShiftPodSecurityAdmission=true"):
-		// if explicitly on or unspecified, run as enforcing.
-		fallthrough
-	default:
+	case psaLabelSyncerEnforcing:
 		controller, err := psalabelsyncer.NewEnforcingPodSecurityAdmissionLabelSynchronizationController(
 			kubeClient.CoreV1().Namespaces(),
 			controllerCtx.KubernetesInformers.Core().V1().Namespaces(),
@@ -47,6 +74,9 @@ func runPodSecurityAdmissionLabelSynchronizationController(ctx context.Context, 
 			return true, err
 		}
 		go controller.Run(ctx, 1)
+
+	default:
+		return false, nil
 	}
 
 	return true, nil
